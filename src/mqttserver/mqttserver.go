@@ -85,7 +85,7 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
             client.Write([]byte{0x20, 0x02, 0x00, 0x04})
             return
         }
-        if (b[offset+7] & 0x3c) != 0x04 { // 目前该服务器仅支持必须启动will，且will的qos为0，非保留标识
+        if (b[offset+7] & 0x04) != 0x00 && (b[offset+7] & 0x3c) != 0x04 { // 目前该服务器仅支持will的qos为0，非保留标识
             log.Println("just support have a will and qos is 0, no retain")
             client.Write([]byte{0x20, 0x02, 0x00, 0x01})
             return
@@ -112,12 +112,18 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
                 return
             }
         }
-        willtopiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
-        willtopic := string(b[offset+2 : offset+2+willtopiclen])
-        offset += 2+willtopiclen
-        willmessagelen := 256 * uint32(b[offset]) + uint32(b[offset+1])
-        willmessage := string(b[offset+2 : offset+2+willtopiclen])
-        offset += 2+willmessagelen
+        var willtopic, willmessage string
+        if (b[offset+7] & 0x3c) == 0x04 { // 需要遗嘱
+            willtopiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
+            willtopic = string(b[offset+2 : offset+2+willtopiclen])
+            offset += 2+willtopiclen
+            willmessagelen := 256 * uint32(b[offset]) + uint32(b[offset+1])
+            willmessage = string(b[offset+2 : offset+2+willtopiclen])
+            offset += 2+willmessagelen
+        } else {
+            willtopic = ""
+            willmessage = ""
+        }
         userlen := 256 * uint32(b[offset]) + uint32(b[offset+1])
         user := string(b[offset+2 : offset+2+userlen])
         offset += 2+userlen
