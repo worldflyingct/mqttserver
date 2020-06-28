@@ -1,5 +1,13 @@
 package mqttserver
 
+/*
+参考资料：
+https://wenku.baidu.com/view/f103c085561252d381eb6edc.html
+测试命令：
+mosquitto_sub -d -h 192.168.56.1 -i ljiafe -u worldflying -P worldflying -t testtopic -v
+mosquitto_pub -d -h 192.168.56.1 -u worldflying -P worldflying -i hemlow -t testtopic -m success
+*/
+
 import (
     "log"
     "net"
