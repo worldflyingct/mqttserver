@@ -12,17 +12,69 @@ import (
     "log"
     "net"
     "strconv"
+    "net/http"
+    "github.com/gorilla/websocket"
 )
 
-type MqttClient struct {
-    client net.Conn
-    clientid string
-    topic []string
-    willtopic string
-    willmessage string
+type Client struct {
+    connType int // 0为tcp, 1为ws
+    tcp net.Conn
+    ws *websocket.Conn
 }
 
-var mqttclients []MqttClient = make([]MqttClient, 0)
+func (c Client) Write (b []byte) (int, error) {
+    var num int
+    var err error
+    if c.connType == 0 { // tcp数据
+        num, err = c.tcp.Write(b)
+    } else if c.connType == 1 { // ws数据
+        err = c.ws.WriteMessage(2, b) // 1为文本数据，2为二进制数据
+        num = len(b)
+    }
+    return num, err
+}
+
+func (c Client) Read (b []byte) (int, error) {
+    var num int
+    var err error
+    if c.connType == 0 { // tcp数据
+        num, err = c.tcp.Read(b)
+    } else if c.connType == 1 { // ws数据
+        mt, message, e := c.ws.ReadMessage()
+        log.Println("messageType:", mt)
+        num = copy(b, message)
+        err = e
+    }
+    return num, err
+}
+
+func (c Client) Close () (error) {
+    var err error
+    if c.connType == 0 { // tcp数据
+        err = c.tcp.Close()
+    } else if c.connType == 1 { // ws数据
+        err = c.ws.Close()
+    }
+    return err
+}
+
+type MqttClient struct {
+    client *Client
+    clientid *string
+    topics []*string
+    willtopic *string
+    willmessage []byte
+}
+
+type Callback func (topic string, data []byte)
+
+type MqttServer struct {
+    mqttclients []*MqttClient
+    topics []string
+    tcpListen *net.TCPListener
+    srv *http.Server
+    cb Callback
+}
 
 func GetMqttDataLength (b []byte) (uint32, uint32)  {
     var datalen uint32
@@ -51,43 +103,46 @@ func GetMqttDataLength (b []byte) (uint32, uint32)  {
     return datalen, offset
 }
 
-func HasSliceValue (arr []string, d string) bool {
+func HasSliceValue (arr []*string, d string) bool {
     arrlen := len(arr)
     for i := 0 ; i < arrlen ; i++ {
-        if arr[i] == d {
+        if *arr[i] == d {
             return true
         }
     }
     return false
 }
 
-func RemoveSliceByValue (arrs []string, d string) []string {
+func RemoveSliceByValue (arrs []*string, d string) []*string {
     arrslen := len(arrs)
     for i := 0 ; i < arrslen ; i++ {
-        if arrs[i] == d {
+        if *arrs[i] == d {
             return append(arrs[:i], arrs[i+1:]...)
         }
     }
     return arrs
 }
 
-func RemoveClientFromMqttClients (mqttclient MqttClient) {
-    mqttclientslen := len(mqttclients)
+func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
+    mqttclientslen := len(ms.mqttclients)
     for i := 0 ; i < mqttclientslen ; i++ {
-        if mqttclients[i].client == mqttclient.client {
-            mqttclients = append(mqttclients[:i], mqttclients[i+1:]...)
+        if ms.mqttclients[i] == mqttclient {
+            ms.mqttclients = append(ms.mqttclients[:i], ms.mqttclients[i+1:]...)
+            if *mqttclient.willtopic != "" {
+                PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
+            }
             return
         }
     }
 }
 
-func HandleTcpClientRequest (client net.Conn, username string, password string) {
+func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, password *string) {
     defer client.Close()
 
     var b [32*1024]byte
     _, err := client.Read(b[:])
     if err != nil {
-        log.Println("mqtt package length error")
+        log.Println(err)
         return
     }
 
@@ -147,25 +202,26 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
     clientid := string(b[offset+2 : offset+2+clientidlen])
     log.Println("clientid:", clientid)
     offset += 2+clientidlen
-    clientlen := len(mqttclients)
+    clientlen := len(ms.mqttclients)
     for i := 0 ; i < clientlen ; i++ {
-        if mqttclients[i].clientid == clientid {
+        if *ms.mqttclients[i].clientid == clientid {
             log.Println("clientid has exist")
             client.Write([]byte{0x20, 0x02, 0x00, 0x02})
             return
         }
     }
-    var willtopic, willmessage string
+    var willtopic string
+    var willmessage []byte
     if needwill == 0x04 { // 需要遗嘱
         willtopiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
         willtopic = string(b[offset+2 : offset+2+willtopiclen])
         offset += 2+willtopiclen
         willmessagelen := 256 * uint32(b[offset]) + uint32(b[offset+1])
-        willmessage = string(b[offset+2 : offset+2+willtopiclen])
+        willmessage = b[offset+2 : offset+2+willtopiclen]
         offset += 2+willmessagelen
     } else {
         willtopic = ""
-        willmessage = ""
+        willmessage = make([]byte, 0)
     }
     userlen := 256 * uint32(b[offset]) + uint32(b[offset+1])
     user := string(b[offset+2 : offset+2+userlen])
@@ -175,16 +231,15 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
     pass := string(b[offset+2 : offset+2+passlen])
     log.Println("password", pass)
     offset += 2+passlen
-    if user != username || pass != password {
+    if user != *username || pass != *password {
         log.Println("username or password error", user, pass)
         client.Write([]byte{0x20, 0x02, 0x00, 0x04})
         return
     }
     client.Write([]byte{0x20, 0x02, 0x00, 0x00})
-    mqttclient := MqttClient{client, clientid, make([]string, 0), willtopic, willmessage}
-    mqttclients = append(mqttclients, mqttclient)
-    defer RemoveClientFromMqttClients(mqttclient)
-    pos := len(mqttclients) - 1
+    mqttclient := &MqttClient{client, &clientid, make([]*string, 0), &willtopic, willmessage}
+    ms.mqttclients = append(ms.mqttclients, mqttclient)
+    defer RemoveClientFromMqttClients(ms, mqttclient)
     for {
         _, err := client.Read(b[:])
         if err != nil {
@@ -205,12 +260,23 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
                 }
                 topiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
                 topic := string(b[offset+2 : offset+2+topiclen])
-                clientlen := len(mqttclients)
+                offset += 2+topiclen
+                // qos为0时，无报文标识符，剩下的全部都是内容
+                if (b[0] & 0x06) != 0x00 { // qos不为0时，存在报文标识符。
+                    offset += 2
+                }
+                tslen := len(ms.topics)
+                for i := 0 ; i < tslen ; i++ {
+                    if ms.topics[i] == topic {
+                        ms.cb(topic, b[offset:datalen])
+                    }
+                }
+                clientlen := len(ms.mqttclients)
                 for i := 0 ; i < clientlen ; i++ {
-                    topiclen = uint32(len(mqttclients[i].topic))
+                    topiclen = uint32(len(ms.mqttclients[i].topics))
                     for j := uint32(0) ; j < topiclen ; j++ {
-                        if mqttclients[i].topic[j] == topic {
-                            mqttclients[i].client.Write(b[:datalen])
+                        if *ms.mqttclients[i].topics[j] == topic {
+                            ms.mqttclients[i].client.Write(b[:datalen])
                         }
                     }
                 }
@@ -236,11 +302,8 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
                     topic := string(b[offset+2 : offset+2+topiclen])
                     offset += 2+topiclen
                     log.Println("topic", topic)
-                    if HasSliceValue(mqttclients[pos].topic, topic) == false {
-                        log.Println("1")
-                        mqttclients[pos].topic = append(mqttclients[pos].topic, topic)
-                    } else {
-                        log.Println("2")
+                    if HasSliceValue(mqttclient.topics, topic) == false {
+                        mqttclient.topics = append(mqttclient.topics, &topic)
                     }
                     if b[offset] != 0 {
                         log.Println("only support Requested QoS is 0.")
@@ -265,7 +328,7 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
                     topiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
                     topic := string(b[offset+2 : offset+2+topiclen])
                     offset += 2+topiclen
-                    mqttclients[pos].topic = RemoveSliceByValue(mqttclients[pos].topic, topic)
+                    mqttclient.topics = RemoveSliceByValue(mqttclient.topics, topic)
                 }
                 client.Write(subackdata)
             case 0xc0: // pingreq
@@ -290,26 +353,108 @@ func HandleTcpClientRequest (client net.Conn, username string, password string) 
     }
 }
 
-func StartTcpServer (tcpport int, username string, password string) {
-    p := strconv.Itoa(tcpport)
-    tcpListen, err := net.Listen("tcp", ":" + p)
-    if err != nil {
-        log.Panic(err)
-    }
-    defer tcpListen.Close()
+func StartTcpServer (ms *MqttServer, tcpListen *net.TCPListener, username *string, password *string) {
     for {
-        tcpclient, err := tcpListen.Accept()
+        tcpclient, err := (*tcpListen).Accept()
         if err != nil {
             log.Println(err)
             continue
         }
-        go HandleTcpClientRequest(tcpclient, username, password)
+        go HandleMqttClientRequest(ms, &Client{0, tcpclient, &websocket.Conn{}}, username, password)
     }
 }
 
-func StartServer (tcpport int, tlsport int, wsport int, wssport int, username string, password string) {
+func StartServer (tcpport int, wsport int, username string, password string, topics []string, cb Callback) *MqttServer {
     log.SetFlags(log.LstdFlags | log.Lshortfile)
+    ms := &MqttServer{
+        mqttclients: make([]*MqttClient, 0),
+        topics: topics,
+        cb: cb,
+    }
     if tcpport != 0 {
-        go StartTcpServer(tcpport, username, password)
+        p := strconv.Itoa(tcpport)
+        addr, _ := net.ResolveTCPAddr("tcp4", ":" + p)
+        tcpListen, err := net.ListenTCP("tcp", addr)
+        if err != nil {
+            log.Panic(err)
+        }
+        go StartTcpServer(ms, tcpListen, &username, &password)
+        ms.tcpListen = tcpListen
+    } else {
+        ms.tcpListen = nil
+    }
+    if wsport != 0 {
+        upgrader := websocket.Upgrader{
+            Subprotocols: []string{"mqtt", "mqttv3.1"},
+            CheckOrigin: func(r *http.Request) bool {
+                return true
+            },
+        }
+        mux := http.NewServeMux()
+        mux.HandleFunc("/mqtt", func (w http.ResponseWriter, r *http.Request) {
+            wsclient, err := upgrader.Upgrade(w, r, nil)
+            if err != nil {
+                log.Println("err msg:", err)
+                return
+            }
+            HandleMqttClientRequest(ms, &Client{1, nil, wsclient}, &username, &password)
+        })
+        mux.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
+            w.Write([]byte("The Worldflying Mqtt Server."))
+        })
+        srv := &http.Server{
+            Addr: ":" + strconv.Itoa(wsport),
+            Handler: mux,
+        }
+        log.Println("start ListenAndServe")
+        go srv.ListenAndServe ()
+        log.Println("end ListenAndServe")
+        ms.srv = srv
+    } else {
+        ms.srv = nil
+    }
+    return ms
+}
+
+func CloseServer (ms *MqttServer) {
+    if ms.srv == nil {
+        ms.srv.Close()
+    }
+    if ms.tcpListen == nil {
+        ms.tcpListen.Close()
+    }
+}
+
+func PublishData (ms *MqttServer, topic string, d []byte) {
+    tslen := len(ms.topics)
+    for i := 0 ; i < tslen ; i++ {
+        if ms.topics[i] == topic {
+            ms.cb(topic, d)
+        }
+    }
+    var b []byte
+    topiclen := len(topic)
+    num := 2 + topiclen + len(d)
+    if num < 127 {
+        b = append([]byte{0x30, byte(num), byte(topiclen / 256), byte(topiclen % 256)}, topic...)
+    } else if num < 16384 {
+        l1 := num % 128 + 128
+        l2 := num / 128
+        b = append([]byte{0x30, byte(l1), byte(l2), byte(topiclen / 256), byte(topiclen % 256)}, topic...)
+    } else {
+        l1 := num % 128 + 128
+        l2 := num / 128 % 128 + 128
+        l3 := num / 16384
+        b = append([]byte{0x30, byte(l1), byte(l2), byte(l3), byte(topiclen / 256), byte(topiclen % 256)}, topic...)
+    }
+    b = append(b, d...)
+    clientlen := len(ms.mqttclients)
+    for i := 0 ; i < clientlen ; i++ {
+        topiclen := uint32(len(ms.mqttclients[i].topics))
+        for j := uint32(0) ; j < topiclen ; j++ {
+            if *ms.mqttclients[i].topics[j] == topic {
+                ms.mqttclients[i].client.Write(b)
+            }
+        }
     }
 }
