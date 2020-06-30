@@ -1,4 +1,4 @@
-package github.com/worldflyingct/go-mqttserver
+package go-mqttserver
 
 /*
 参考资料：
