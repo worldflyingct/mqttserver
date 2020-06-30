@@ -1,4 +1,4 @@
-package go-mqttserver
+package mqttserver
 
 /*
 参考资料：
