@@ -3,7 +3,7 @@ package main
 import (
     "fmt"
     "time"
-    "github.com/worldflyingct/go-mqttserver"
+    "github.com/worldflyingct/mqttserver"
 )
 
 func main () {
