@@ -1,0 +1,13 @@
+.cap {
+    float: left;
+    width: 50%;
+}
+label {
+    float: left;
+    width: 110px;
+}
+#msgbox {
+    width: 100%;
+    height: 480px;
+    overflow-y: auto;
+}

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>mqtt服务测试工具</title>
+    <link href="styles.css" rel="stylesheet">
+    <script type="text/javascript" src="paho-mqtt-min.js"></script>
+    <script type="text/javascript" src="index.js"></script>
+  </head>
+  <body>
+    <div>解决方案来自http://www.eclipse.org/paho/clients/js/</div>
+    <div class="cap">
+      <h2>Mqtt web客户端</h2>
+      <div>
+        <label for="server">服务器地址:</label>
+        <input type="text" id="server" value="127.0.0.1"/>
+      </div>
+      <div>
+        <label for="port">默认端口:</label>
+        <input type="number" id="port" value="9001"/>
+      </div>
+      <div>
+        <label for="username">服务器用户名:</label>
+        <input type="text" id="username" value="worldflying"/>
+      </div>
+      <div>
+        <label for="password">服务器密码:</label>
+        <input type="text" id="password" value="worldflying"/>
+      </div>
+      <div>
+        <label for="topic">监听topic:</label>
+        <input type="text" id="topic" value="testtopic"/>
+      </div>
+      <div>
+        <label for="useSSL">useSSL:</label>
+        <input type="checkbox" id="useSSL"/>
+      </div>
+<!--
+      <div>
+        <label for="reconnect">自动断线重连:</label>
+        <input type="checkbox" id="reconnect"/>
+      </div>
+-->
+      <div>
+        <label for="sendtopic">发送topic:</label>
+        <input type="text" id="sendtopic" value="topic"/>
+      </div>
+      <div>
+        <label for="sendmsg">msg:</label>
+        <input type="text" id="sendmsg"/>
+      </div>
+      <div>
+        <button onclick="connect_server();">连接</button>
+        <button onclick="disconnect_server();">断开</button>
+        <button onclick="mqtt_send();">发送</button>
+      </div>
+    </div>
+    <div class="cap">
+        <div id="msgbox"></div>
+    </div>
+  </body>
+</html>
