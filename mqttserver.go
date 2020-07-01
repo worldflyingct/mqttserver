@@ -406,9 +406,7 @@ func StartServer (tcpport int, wsport int, username string, password string, top
             Addr: ":" + strconv.Itoa(wsport),
             Handler: mux,
         }
-        log.Println("start ListenAndServe")
         go srv.ListenAndServe ()
-        log.Println("end ListenAndServe")
         ms.srv = srv
     } else {
         ms.srv = nil
