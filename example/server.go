@@ -8,7 +8,7 @@ import (
 
 func main () {
     var in string
-	ms := mqttserver.StartServer(1883, 9001, "worldflying", "worldflying", []string{"loseconnect", "testtopic"}, func (topic string, d []byte) {
+    ms := mqttserver.StartServer(1883, 9001, "worldflying", "worldflying", []string{"loseconnect", "testtopic"}, func (topic string, d []byte) {
         fmt.Println(topic, string(d))
     })
     for {
