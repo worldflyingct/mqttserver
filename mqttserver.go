@@ -12,6 +12,7 @@ import (
     "log"
     "net"
     "strconv"
+    "time"
     "net/http"
     "github.com/gorilla/websocket"
 )
@@ -127,10 +128,13 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
     mqttclientslen := len(ms.mqttclients)
     for i := 0 ; i < mqttclientslen ; i++ {
         if ms.mqttclients[i] == mqttclient {
+            log.Println("connect lose, clientid:", *mqttclient.clientid)
             ms.mqttclients = append(ms.mqttclients[:i], ms.mqttclients[i+1:]...)
             if *mqttclient.willtopic != "" {
                 PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
             }
+            time.Sleep(3 * time.Second)
+            mqttclient.client.Close();
             return
         }
     }
@@ -195,7 +199,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
         client.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
-    needwill := b[offset] & 0x3c
+    needwill := b[offset] & 0x04
     offset += 1
     offset += 2 // 舍弃keepalive数据的读取
     clientidlen := 256 * uint32(b[offset]) + uint32(b[offset+1])
@@ -212,7 +216,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     }
     var willtopic string
     var willmessage []byte
-    if needwill == 0x04 { // 需要遗嘱
+    if needwill != 0 { // 需要遗嘱
         willtopiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
         willtopic = string(b[offset+2 : offset+2+willtopiclen])
         offset += 2+willtopiclen
@@ -243,7 +247,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     for {
         _, err := client.Read(b[:])
         if err != nil {
-            log.Println("client connect lose!")
+            log.Println("tcp read fail.")
             return
         }
 
@@ -415,10 +419,10 @@ func StartServer (tcpport int, wsport int, username string, password string, top
 }
 
 func CloseServer (ms *MqttServer) {
-    if ms.srv == nil {
+    if ms.srv != nil {
         ms.srv.Close()
     }
-    if ms.tcpListen == nil {
+    if ms.tcpListen != nil {
         ms.tcpListen.Close()
     }
 }
