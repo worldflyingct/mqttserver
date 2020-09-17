@@ -180,7 +180,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
         client.Write([]byte{0x20, 0x02, 0x00, 0x04})
         return
     }
-    if (b[offset] & 0x04) != 0x00 && (b[offset+7] & 0x3c) != 0x04 { // 目前该服务器仅支持will的qos为0，非保留标识
+    if (b[offset] & 0x04) != 0x00 && (b[offset] & 0x38) != 0x00 { // 目前该服务器仅支持will的qos为0，非保留标识
         log.Println("just support have a will and qos is 0, no retain")
         client.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
