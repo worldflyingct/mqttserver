@@ -14,16 +14,21 @@ import (
     "strconv"
     "time"
     "net/http"
-    "github.com/gorilla/websocket"
+    "github.com/valyala/fasthttp"
+    "github.com/fasthttp/websocket"
 )
 
-type Client struct {
+type MqttClient struct {
     connType int // 0为tcp, 1为ws
     tcp net.Conn
     ws *websocket.Conn
+    clientid *string
+    topics []*string
+    willtopic *string
+    willmessage []byte
 }
 
-func (c Client) Write (b []byte) (int, error) {
+func (c MqttClient) Write (b []byte) (int, error) {
     var num int
     var err error
     if c.connType == 0 { // tcp数据
@@ -35,7 +40,7 @@ func (c Client) Write (b []byte) (int, error) {
     return num, err
 }
 
-func (c Client) Read (b []byte) (int, error) {
+func (c MqttClient) Read (b []byte) (int, error) {
     var num int
     var err error
     if c.connType == 0 { // tcp数据
@@ -49,7 +54,7 @@ func (c Client) Read (b []byte) (int, error) {
     return num, err
 }
 
-func (c Client) Close () (error) {
+func (c MqttClient) Close () (error) {
     var err error
     if c.connType == 0 { // tcp数据
         err = c.tcp.Close()
@@ -59,22 +64,16 @@ func (c Client) Close () (error) {
     return err
 }
 
-type MqttClient struct {
-    client *Client
-    clientid *string
-    topics []*string
-    willtopic *string
-    willmessage []byte
-}
-
 type Callback func (topic string, data []byte)
 
 type MqttServer struct {
     mqttclients []*MqttClient
     topics []string
     tcpListen *net.TCPListener
-    srv *http.Server
+    // srv *http.Server
     cb Callback
+    username string
+    password string
 }
 
 func GetMqttDataLength (b []byte) (uint32, uint32)  {
@@ -134,17 +133,17 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
                 PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
             }
             time.Sleep(3 * time.Second)
-            mqttclient.client.Close();
+            mqttclient.Close();
             return
         }
     }
 }
 
-func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, password *string) {
-    defer client.Close()
+func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
+    defer mqttclient.Close()
 
     var b [32*1024]byte
-    _, err := client.Read(b[:])
+    _, err := mqttclient.Read(b[:])
     if err != nil {
         log.Println(err)
         return
@@ -162,7 +161,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     log.Println("connect")
     if (b[0] & 0x0f) != 0x00 {
         log.Println("mqtt connect package flag error")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
     protnamelen := 256 * uint32(b[offset]) + uint32(b[offset+1])
@@ -170,33 +169,33 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     offset += 2+protnamelen
     if b[offset] != 0x03 && b[offset] != 0x04 && b[offset] != 0x05 { // 0x03为mqtt3.1, 0x04为mqtt3.1.1, 0x05为mqtt5
         log.Println("no support mqtt version", b[offset])
-        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
     offset += 1
     if (b[offset] & 0x80) != 0x80  { // 判断是否支持用户名，如果不支持，服务器直接断开连接
         log.Println("need a username")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x04})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
         return
     }
     if (b[offset] & 0x40) != 0x40  { // 判断是否支持密码，如果不支持，服务器直接断开连接
         log.Println("need a password")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x04})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
         return
     }
     if (b[offset] & 0x04) != 0x00 && (b[offset] & 0x38) != 0x00 { // 目前该服务器仅支持will的qos为0，非保留标识
         log.Println("just support have a will and qos is 0, no retain")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
     if (b[offset] & 0x02) != 0x02 { // Clean Session位必须位1
         log.Println("clean session must 1")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
     if (b[offset] & 0x01) == 0x01 { // 保留位错误
         log.Println("Reserved Bit error")
-        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
         return
     }
     needwill := b[offset] & 0x04
@@ -210,7 +209,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     for i := 0 ; i < clientlen ; i++ {
         if *ms.mqttclients[i].clientid == clientid {
             log.Println("clientid has exist")
-            client.Write([]byte{0x20, 0x02, 0x00, 0x02})
+            mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x02})
             return
         }
     }
@@ -235,17 +234,20 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     pass := string(b[offset+2 : offset+2+passlen])
     log.Println("password", pass)
     offset += 2+passlen
-    if user != *username || pass != *password {
+    if user != ms.username || pass != ms.password {
         log.Println("username or password error", user, pass)
-        client.Write([]byte{0x20, 0x02, 0x00, 0x04})
+        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
         return
     }
-    client.Write([]byte{0x20, 0x02, 0x00, 0x00})
-    mqttclient := &MqttClient{client, &clientid, make([]*string, 0), &willtopic, willmessage}
+    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
+    mqttclient.clientid = &clientid
+    mqttclient.topics = make([]*string, 0)
+    mqttclient.willtopic = &willtopic
+    mqttclient.willmessage = willmessage
     ms.mqttclients = append(ms.mqttclients, mqttclient)
     defer RemoveClientFromMqttClients(ms, mqttclient)
     for {
-        _, err := client.Read(b[:])
+        _, err := mqttclient.Read(b[:])
         if err != nil {
             log.Println("tcp read fail.")
             return
@@ -280,7 +282,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
                     topiclen = uint32(len(ms.mqttclients[i].topics))
                     for j := uint32(0) ; j < topiclen ; j++ {
                         if *ms.mqttclients[i].topics[j] == topic {
-                            ms.mqttclients[i].client.Write(b[:datalen])
+                            ms.mqttclients[i].Write(b[:datalen])
                         }
                     }
                 }
@@ -296,7 +298,7 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
                 log.Println("subscribe")
                 if (b[0] & 0x0f) != 0x02 {
                     log.Println("mqtt connect package flag error")
-                    client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
                 subackdata := []byte{0x90, 0x02, b[offset], b[offset+1]} // 报文标识符
@@ -311,19 +313,19 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
                     }
                     if b[offset] != 0 {
                         log.Println("only support Requested QoS is 0.")
-                        client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                         return
                     }
                     offset += 1 // 跳过迁移服务质量等级
                     subackdata[1]++
                     subackdata = append(subackdata, 0x00)
                 }
-                client.Write(subackdata)
+                mqttclient.Write(subackdata)
             case 0xa0: // unsubscribe
                 log.Println("unsubscribe")
                 if (b[0] & 0x0f) != 0x02 {
                     log.Println("mqtt connect package flag error")
-                    client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
                 subackdata := []byte{0xb0, 0x02, b[offset], b[offset+1]} // 报文标识符
@@ -334,20 +336,20 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
                     offset += 2+topiclen
                     mqttclient.topics = RemoveSliceByValue(mqttclient.topics, topic)
                 }
-                client.Write(subackdata)
+                mqttclient.Write(subackdata)
             case 0xc0: // pingreq
                 log.Println("pingreq")
                 if (b[0] & 0x0f) != 0x00 || b[1] != 0x00 || datalen != 2 {
                     log.Println("mqtt connect package flag error")
-                    client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
-                client.Write([]byte{0xd0, 0x00})
+                mqttclient.Write([]byte{0xd0, 0x00})
             case 0xe0: // disconnect
                 log.Println("disconnect")
                 if (b[0] & 0x0f) != 0x00 || b[1] != 0x00 || datalen != 2 {
                     log.Println("mqtt connect package flag error")
-                    client.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
             default:
@@ -357,36 +359,40 @@ func HandleMqttClientRequest (ms *MqttServer, client *Client, username *string, 
     }
 }
 
-func StartTcpServer (ms *MqttServer, tcpListen *net.TCPListener, username *string, password *string) {
+func StartTcpServer (ms *MqttServer, tcpListen *net.TCPListener) {
     for {
         tcpclient, err := (*tcpListen).Accept()
         if err != nil {
             log.Println(err)
             continue
         }
-        go HandleMqttClientRequest(ms, &Client{0, tcpclient, &websocket.Conn{}}, username, password)
+        go HandleMqttClientRequest(ms, &MqttClient{connType:1, tcp:tcpclient})
     }
 }
 
-func StartServer (tcpport int, wsport int, username string, password string, topics []string, cb Callback) *MqttServer {
+func StartServer (tcpport int, username string, password string, topics []string, cb Callback) *MqttServer {
     log.SetFlags(log.LstdFlags | log.Lshortfile)
     ms := &MqttServer{
         mqttclients: make([]*MqttClient, 0),
         topics: topics,
         cb: cb,
+        username: username,
+        password: password,
     }
     if tcpport != 0 {
         p := strconv.Itoa(tcpport)
         addr, _ := net.ResolveTCPAddr("tcp4", ":" + p)
         tcpListen, err := net.ListenTCP("tcp", addr)
         if err != nil {
-            log.Panic(err)
+            log.Println(err)
+            return nil
         }
-        go StartTcpServer(ms, tcpListen, &username, &password)
+        go StartTcpServer(ms, tcpListen)
         ms.tcpListen = tcpListen
     } else {
         ms.tcpListen = nil
     }
+/*
     if wsport != 0 {
         upgrader := websocket.Upgrader{
             Subprotocols: []string{"mqtt", "mqttv3.1"},
@@ -401,7 +407,7 @@ func StartServer (tcpport int, wsport int, username string, password string, top
                 log.Println("err msg:", err)
                 return
             }
-            HandleMqttClientRequest(ms, &Client{1, nil, wsclient}, &username, &password)
+            HandleMqttClientRequest(ms, &MqttClient{1, nil, wsclient}, &username, &password)
         })
         mux.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
             w.Write([]byte("The Worldflying Mqtt Server."))
@@ -415,13 +421,112 @@ func StartServer (tcpport int, wsport int, username string, password string, top
     } else {
         ms.srv = nil
     }
+*/
     return ms
 }
 
+type WebSocketParam struct {
+    timeout time.Duration
+    rbufsize int
+    wbufsize int
+}
+
+func ListenNetHttpWebSocket (ms *MqttServer, w http.ResponseWriter, r *http.Request, params *WebSocketParam) (error) {
+    var timeout time.Duration
+    var rbufsize, wbufsize int
+    if params != nil {
+        if params.timeout == 0 {
+            timeout = 5
+        } else {
+            timeout = params.timeout
+        }
+        if params.rbufsize == 0 {
+            rbufsize = 1024
+        } else {
+            rbufsize = params.rbufsize
+        }
+        if params.wbufsize == 0 {
+            wbufsize = 1024
+        } else {
+            wbufsize = params.wbufsize
+        }
+    } else {
+        timeout = 5
+        rbufsize = 1024
+        wbufsize = 1024
+    }
+    upgrader := websocket.Upgrader{
+        HandshakeTimeout: timeout * time.Second,
+        ReadBufferSize:  rbufsize,
+        WriteBufferSize: wbufsize,
+        Subprotocols: []string{"mqtt", "mqttv3.1"},
+        CheckOrigin: func(r *http.Request) bool {
+            return true
+        },
+        EnableCompression: true,
+    }
+    conn, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        log.Println(err)
+        return err
+    }
+    go HandleMqttClientRequest(ms, &MqttClient{connType:1, ws:conn})
+    return nil
+}
+
+func ListenFastHttpWebSocket (ms *MqttServer, ctx *fasthttp.RequestCtx, params *WebSocketParam) (error) {
+    var timeout time.Duration
+    var rbufsize, wbufsize int
+    if params != nil {
+        if params.timeout == 0 {
+            timeout = 5
+        } else {
+            timeout = params.timeout
+        }
+        if params.rbufsize == 0 {
+            rbufsize = 1024
+        } else {
+            rbufsize = params.rbufsize
+        }
+        if params.wbufsize == 0 {
+            wbufsize = 1024
+        } else {
+            wbufsize = params.wbufsize
+        }
+    } else {
+        timeout = 5
+        rbufsize = 1024
+        wbufsize = 1024
+    }
+    upgrader := websocket.FastHTTPUpgrader {
+        HandshakeTimeout: timeout * time.Second,
+        ReadBufferSize:  rbufsize,
+        WriteBufferSize: wbufsize,
+        Subprotocols: []string{"mqtt", "mqttv3.1"},
+        CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
+            return true
+        },
+        EnableCompression: true,
+    }
+    err := upgrader.Upgrade(ctx, func (conn *websocket.Conn) {
+        HandleMqttClientRequest(ms, &MqttClient{connType:1, ws:conn})
+    })
+    if err != nil {
+        log.Println(err)
+    }
+    return err
+}
+
 func CloseServer (ms *MqttServer) {
+    mqttclientslen := len(ms.mqttclients)
+    for i := 0 ; i < mqttclientslen ; i++ {
+        ms.mqttclients[i].Close();
+    }
+/*
     if ms.srv != nil {
         ms.srv.Close()
     }
+*/
     if ms.tcpListen != nil {
         ms.tcpListen.Close()
     }
@@ -455,7 +560,7 @@ func PublishData (ms *MqttServer, topic string, d []byte) {
         topiclen := uint32(len(ms.mqttclients[i].topics))
         for j := uint32(0) ; j < topiclen ; j++ {
             if *ms.mqttclients[i].topics[j] == topic {
-                ms.mqttclients[i].client.Write(b)
+                ms.mqttclients[i].Write(b)
             }
         }
     }
