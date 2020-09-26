@@ -392,36 +392,6 @@ func StartServer (tcpport int, username string, password string, topics []string
     } else {
         ms.tcpListen = nil
     }
-/*
-    if wsport != 0 {
-        upgrader := websocket.Upgrader{
-            Subprotocols: []string{"mqtt", "mqttv3.1"},
-            CheckOrigin: func(r *http.Request) bool {
-                return true
-            },
-        }
-        mux := http.NewServeMux()
-        mux.HandleFunc("/mqtt", func (w http.ResponseWriter, r *http.Request) {
-            wsclient, err := upgrader.Upgrade(w, r, nil)
-            if err != nil {
-                log.Println("err msg:", err)
-                return
-            }
-            HandleMqttClientRequest(ms, &MqttClient{1, nil, wsclient}, &username, &password)
-        })
-        mux.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
-            w.Write([]byte("The Worldflying Mqtt Server."))
-        })
-        srv := &http.Server{
-            Addr: ":" + strconv.Itoa(wsport),
-            Handler: mux,
-        }
-        go srv.ListenAndServe ()
-        ms.srv = srv
-    } else {
-        ms.srv = nil
-    }
-*/
     return ms
 }
 
@@ -522,11 +492,6 @@ func CloseServer (ms *MqttServer) {
     for i := 0 ; i < mqttclientslen ; i++ {
         ms.mqttclients[i].Close();
     }
-/*
-    if ms.srv != nil {
-        ms.srv.Close()
-    }
-*/
     if ms.tcpListen != nil {
         ms.tcpListen.Close()
     }
