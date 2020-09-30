@@ -365,7 +365,7 @@ func StartTcpServer (ms *MqttServer, tcpListen *net.TCPListener) {
             log.Println(err)
             continue
         }
-        go HandleMqttClientRequest(ms, &MqttClient{connType:1, tcp:tcpclient})
+        go HandleMqttClientRequest(ms, &MqttClient{connType:0, tcp:tcpclient})
     }
 }
 
