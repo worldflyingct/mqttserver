@@ -30,34 +30,46 @@ static int ParseHttpHeader (char* str,
 static int listenfd;
 struct WS {
     int fd;
-    unsigned char state; // 0为未注，1为注册
-    struct EPOLL_PARAMS* epoll;
-    unsigned char *package;
-    unsigned int packagelen; // 当前包的理论大小
-    unsigned int uselen; // 已经消耗的缓存
+    EVENT_FUNCTION *func;
+    WRITE_FUNCTION *write;
+    DELETE_FUNCTION *delete;
+    unsigned char mqttstate; // 0为未注，1为注册
+    unsigned char *mqttpackage;
+    unsigned int mqttpackagelen; // 当前包的理论大小
+    unsigned int mqttuselen; // 已经消耗的缓存
+    struct WS *head;
     struct WS *tail;
+    unsigned char wsstate; // 0为未注，1为注册
+    unsigned char *wspackage;
+    unsigned int wspackagelen; // 当前包的理论大小
+    unsigned int wsuselen; // 已经消耗的缓存
 };
 static struct WS *remainws = NULL;
+extern unsigned char *buff;
 
-static int Ws_Delete_Connect (struct WS *ws) {
-    remove_fd_from_poll(ws->epoll);
+static int Ws_Delete_Connect (void *ptr) {
+    struct WS *ws = ptr;
+    remove_fd_from_poll(ws);
     ws->tail = remainws;
     remainws = ws;
-    close(ws->fd);
+}
+
+static int Ws_Write_Connect (void *ptr, unsigned char *data, unsigned int len) {
+    struct WS *ws = ptr;
+    write(ws->fd, data, len);
 }
 
 static int Ws_Event_Handler (int event, void *ptr) {
-    static unsigned char buff[512*1024];
     struct WS *ws = ptr;
     if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
         Ws_Delete_Connect(ws);
         return 0;
     }
-    ssize_t len = read(ws->fd, buff, 32*1024);
+    ssize_t len = read(ws->fd, buff, 512*1024);
     if (len < 0) {
         return 0;
     }
-    if (!ws->state) {
+    if (!ws->wsstate) {
         char *method, *path, *version;
         struct HTTPPARAM httpparam[30];
         unsigned int size = 30;
@@ -101,23 +113,27 @@ static int Ws_Event_Handler (int event, void *ptr) {
             Ws_Delete_Connect(ws);
             return -3;
         }
-        ws->state = 1;
+        ws->wsstate = 1;
         return 0;
     } else {
-        if (ws->packagelen) {
-            memcpy(ws->package + ws->uselen, buff, len);
-            ws->uselen += len;
-            if (ws->uselen < ws->packagelen) {
+        if (ws->wspackagelen) {
+            memcpy(ws->wspackage + ws->wsuselen, buff, len);
+            ws->wsuselen += len;
+            if (ws->wsuselen < ws->wspackagelen) {
                 return 0;
             }
-            memcpy(buff, ws->package, ws->uselen);
-            len = ws->uselen;
-            ws->uselen = 0;
-            ws->packagelen = 0;
-            free(ws->package);
-            ws->package = NULL;
+            memcpy(buff, ws->wspackage, ws->wsuselen);
+            len = ws->wsuselen;
+            ws->wsuselen = 0;
+            ws->wspackagelen = 0;
+            free(ws->wspackage);
+            ws->wspackage = NULL;
         }
         while (1) {
+            if (len < 6) {
+                printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
+                return 0;
+            }
             unsigned char *mask;
             unsigned char *data;
             unsigned int datalen = buff[1] & 0x7f;
@@ -154,15 +170,15 @@ static int Ws_Event_Handler (int event, void *ptr) {
                 }
             }
             if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-                ws->package = (unsigned char*)malloc(2*packagelen);
-                if (ws->package == NULL) {
+                ws->wspackage = (unsigned char*)malloc(2*packagelen);
+                if (ws->wspackage == NULL) {
                     printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Ws_Delete_Connect(ws);
                     return -4;
                 }
-                memcpy(ws->package, buff, len);
-                ws->packagelen = packagelen;
-                ws->uselen = len;
+                memcpy(ws->wspackage, buff, len);
+                ws->wspackagelen = packagelen;
+                ws->wsuselen = len;
                 return 0;
             }
             if (mask) {
@@ -199,7 +215,7 @@ static int Ws_Event_Handler (int event, void *ptr) {
     return 0;
 }
 
-static int Ws_New_Connect (int event, void *ptr) {
+static int Ws_New_Connect (int event) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(listenfd, (struct sockaddr*)&sin, &in_addr_len);
@@ -218,20 +234,25 @@ static int Ws_New_Connect (int event, void *ptr) {
             return -2;
         }
     }
-    ws->state = 0;
     ws->fd = fd;
-    struct EPOLL_PARAMS *epoll = add_fd_to_poll(fd, Ws_Event_Handler, ws);
-    if (epoll == NULL) {
+    ws->func = Ws_Event_Handler;
+    ws->write = Ws_Write_Connect;
+    ws->delete = Ws_Delete_Connect;
+    ws->mqttstate = 0;
+    ws->package = NULL;
+    ws->packagelen = 0;
+    ws->uselen = 0;
+    ws->wspackage = NULL;
+    ws->wspackagelen = 0;
+    ws->wsuselen = 0;
+    ws->wsstate = 0;
+    if (add_fd_to_poll(ws)) {
         printf("in %s, at %d\n", __FILE__, __LINE__);
         close(fd);
         ws->tail = remainws;
         remainws = ws;
         return -3;
     }
-    ws->epoll = epoll;
-    ws->package = NULL;
-    ws->packagelen = 0;
-    ws->uselen = 0;
     return 0;
 }
 
@@ -259,16 +280,19 @@ int Ws_Create () {
         close(listenfd);
         return -3;
     }
-    struct EPOLL_PARAMS *epoll = add_fd_to_poll(listenfd, Ws_New_Connect, NULL);
-    if (epoll == NULL) {
-        close(listenfd);
+    struct WS *ws = (struct WS*)malloc(sizeof(struct WS));
+    if (ws == NULL) {
+        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
         return -4;
     }
+    ws->fd = listenfd;
+    ws->func = Ws_New_Connect;
+    struct EPOLL *epoll = add_fd_to_poll(ws);
+    if (epoll == NULL) {
+        close(listenfd);
+        return -5;
+    }
     return 0;
-}
-
-void Ws_Delete () {
-    close(listenfd);
 }
 
 static int ParseHttpHeader (char* str,

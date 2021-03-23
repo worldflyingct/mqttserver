@@ -4,17 +4,12 @@
 #include <sys/epoll.h>
 
 typedef int EVENT_FUNCTION (int event, void *ptr);
-
-struct EPOLL_PARAMS {
-    int fd;
-    EVENT_FUNCTION *func;
-    void *ptr;
-    struct EPOLL_PARAMS *tail;
-};
+typedef int WRITE_FUNCTION (void *ptr, unsigned char *data, unsigned int len);
+typedef int DELETE_FUNCTION (void *ptr);
 
 int event_poll_create ();
 void event_poll_loop ();
-struct EPOLL_PARAMS *add_fd_to_poll (int fd, EVENT_FUNCTION func, void *ptr);
-void remove_fd_from_poll (struct EPOLL_PARAMS *param);
+int add_fd_to_poll (void *ptr);
+void remove_fd_from_poll (void *ptr);
 
 #endif

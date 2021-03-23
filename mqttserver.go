@@ -81,19 +81,15 @@ func GetMqttDataLength (b []byte) (uint32, uint32)  {
     if (b[1] & 0x80) != 0x00 {
         if (b[2] & 0x80) != 0x00 {
             if (b[3] & 0x80) != 0x00 {
-                if (b[4] & 0x80) != 0x00 {
-                    return 0, 0
-                } else {
-                    offset = 5
-                    datalen = 128 * 128 * 128 * uint32(b[4]) + 128 * 128 * uint32(b[3] & 0x7f) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 2
-                }
+                offset = 5
+                atalen = 128 * 128 * 128 * uint32(b[4]) + 128 * 128 * uint32(b[3] & 0x7f) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 5
             } else {
                 offset = 4
-                datalen = 128 * 128 * uint32(b[3]) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 2
+                datalen = 128 * 128 * uint32(b[3]) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 4
             }
         } else {
             offset = 3
-            datalen = 128 * uint32(b[2]) + uint32(b[1] & 0x7f) + 2
+            datalen = 128 * uint32(b[2]) + uint32(b[1] & 0x7f) + 3
         }
     } else {
         offset = 2
