@@ -2,19 +2,20 @@
 #include "config.h"
 #include "event_poll.h"
 #include "ws.h"
-
-unsigned char buff[512*1024];
+#include "tcp.h"
 
 int main () {
-    InitConfig();
-    if (event_poll_create()) {
+    if (!InitConfig()) {
         return -1;
     }
-    if (Tcp_Create()) {
+    if (event_poll_create()) {
         return -2;
     }
-    if (Ws_Create()) {
+    if (Tcp_Create()) {
         return -3;
+    }
+    if (Ws_Create()) {
+        return -4;
     }
     event_poll_loop();
     return 0;

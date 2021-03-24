@@ -82,7 +82,7 @@ func GetMqttDataLength (b []byte) (uint32, uint32)  {
         if (b[2] & 0x80) != 0x00 {
             if (b[3] & 0x80) != 0x00 {
                 offset = 5
-                atalen = 128 * 128 * 128 * uint32(b[4]) + 128 * 128 * uint32(b[3] & 0x7f) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 5
+                datalen = 128 * 128 * 128 * uint32(b[4]) + 128 * 128 * uint32(b[3] & 0x7f) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 5
             } else {
                 offset = 4
                 datalen = 128 * 128 * uint32(b[3]) + 128 * uint32(b[2] & 0x7f) + uint32(b[1] & 0x7f) + 4
@@ -256,7 +256,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
             case 0x30: // publish
                 log.Println("publish")
                 if (b[0] & 0x0f) != 0x00 { // 本程序不处理dup，qos与retain不为0的报文
-                    log.Println("publish dup,qos and retain is not 0.")
+                    log.Println("publish dup,qos or retain is not 0.")
                     continue
                 }
                 topiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
@@ -323,7 +323,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                     mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
-                subackdata := []byte{0xb0, 0x02, b[offset], b[offset+1]} // 报文标识符
+                unsubackdata := []byte{0xb0, 0x02, b[offset], b[offset+1]} // 报文标识符
                 offset += 2
                 for offset < datalen {
                     topiclen := 256 * uint32(b[offset]) + uint32(b[offset+1])
@@ -331,7 +331,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                     offset += 2+topiclen
                     mqttclient.topics = RemoveSliceByValue(mqttclient.topics, topic)
                 }
-                mqttclient.Write(subackdata)
+                mqttclient.Write(unsubackdata)
             case 0xc0: // pingreq
                 log.Println("pingreq")
                 if (b[0] & 0x0f) != 0x00 || b[1] != 0x00 || datalen != 2 {

@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "cJSON.h"
 #include "config.h"
 
-#define DEFAULTCONFIG   "{\r\n  \"tcpport\": 1883,\r\n  \"wsport\": 9001\r\n}"
+#define DEFAULTCONFIG   "{\r\n  \"tcpport\": 1883,\r\n  \"wsport\": 9001,\r\n  \"mqttuser\": \"5QdISjSg40jHFyzR\",\r\n  \"mqttkey\": \"QLUL276kqXn55lBK\"\r\n}"
 
 struct ConfigData configdata;
 
@@ -52,10 +53,23 @@ struct ConfigData* InitConfig () {
     } else {
         configdata.wsport = 0;
     }
+    obj = cJSON_GetObjectItem(json, "mqttuser");
+    if (obj) {
+        memcpy(configdata.mqttuser, obj->valuestring, 16);
+        configdata.mqttuser[16] = '\0';
+    } else {
+        memcpy(configdata.mqttuser, "QLUL276kqXn55lBK", 17);
+    }
+    obj = cJSON_GetObjectItem(json, "mqttkey");
+    if (obj) {
+        memcpy(configdata.mqttkey, obj->valuestring, 16);
+        configdata.mqttkey[16] = '\0';
+    } else {
+        memcpy(configdata.mqttkey, "QLUL276kqXn55lBK", 17);
+    }
     cJSON_Delete(json);
     return &configdata;
 }
-
 
 struct ConfigData* GetConfig () {
     return &configdata;
