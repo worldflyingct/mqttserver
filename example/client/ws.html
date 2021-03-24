@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>websocket测试</title>
+</head>
+<body>
+    <div id="app">
+        <div>
+            <div>
+                <label>url:</label>
+                <input type="text" v-model="url" style="width: 235px"/>
+                <label>protocol:</label>
+                <input type="checkbox" v-model="enablebprotocol"/>
+                <input v-if="enablebprotocol" type="text" v-model="protocol" style="width: 60px"/>
+                <button @click="connect">连接</button>
+            </div>
+        </div>
+        <div>
+            <label>待发送数据:</label>
+            <input type="text" v-model="msg" style="width: 306px"/>
+        </div>
+        <div v-for="(item, index) in wslist">
+            <span>{{item.url}}</span>
+            <button @click="send(index)">发送</button>
+            <button @click="sendfile(index)">发送文件</button>
+            <button @click="disconnect(index)">断开</button>
+        </div>
+    </div>
+    <script src="vue.min.js"></script>
+    <script>
+        new Vue({
+            el: "#app",
+            data: {
+                url: 'ws://127.0.0.1:9001/mqtt',
+                wslist: [],
+                msg: '',
+                enablebprotocol: false,
+                protocol: ''
+            },
+            methods: {
+                connect: function () {
+                    var _this = this
+                    var ws
+                    if (_this.enablebprotocol) {
+                        ws = new WebSocket(_this.url, _this.protocol)
+                    } else {
+                        ws = new WebSocket(_this.url)
+                    }
+                    ws.onopen = function() {
+                        _this.wslist.push(ws)
+                    }            
+                    ws.onclose = function() {
+                        var index = _this.wslist.indexOf(ws)
+                        if (index != -1) {
+                            _this.wslist.splice(index, 1)
+                        }
+                    }
+                },
+                send: function (index) {
+                    var _this = this
+                    _this.wslist[index].send(_this.msg)
+                },
+                sendfile: function (index) {
+                    var _this = this
+                    var input = document.createElement('input')
+                    input.type = 'file'
+                    input.onchange = function () {
+                        var fr = new FileReader()
+                        fr.onload = function () {
+                            console.log('start send')
+                            _this.wslist[index].send(fr.result)
+                        }
+                        console.log('start encode')
+                        fr.readAsDataURL(input.files[0])
+                    }
+                    input.click()
+                },
+                disconnect: function (index) {
+                    var _this = this
+                    _this.wslist[index].close()
+                }
+            }
+        })
+    </script>
+</body>
+</html>
