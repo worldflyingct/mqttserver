@@ -1,7 +1,8 @@
-module github.com/worldflyingct/mqttserver
+module mqttserver
 
-go 1.14
+go 1.16
 
 require (
-    github.com/fasthttp/websocket
+	github.com/fasthttp/websocket v1.4.3
+	github.com/valyala/fasthttp v1.22.0
 )
