@@ -540,8 +540,8 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     }
     var b []byte
     var offset uint32
-    topiclen := len(topic)
-    msglen := len(msg)
+    topiclen := uint32(len(topic))
+    msglen := uint32(len(msg))
     num := 2 + topiclen + msglen
     if num < 127 {
         b = make([]byte, num + 2)

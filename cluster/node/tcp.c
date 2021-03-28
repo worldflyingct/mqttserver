@@ -37,7 +37,7 @@ static int Tcp_New_Connect (int event, EPOLL *e, unsigned char *buff) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
         return -1;
     }
-    EPOLL *epoll = add_fd_to_poll(fd);
+    EPOLL *epoll = add_fd_to_poll(fd, 0);
     if (epoll == NULL) {
         printf("add fd to poll fail, in %s, at %d\n", __FILE__, __LINE__);
         close(fd);
@@ -50,12 +50,15 @@ static int Tcp_New_Connect (int event, EPOLL *e, unsigned char *buff) {
     epoll->mqttpackage = NULL;
     epoll->mqttpackagelen = 0;
     epoll->mqttuselen = 0;
+    epoll->buff = NULL;
+    epoll->bufflen = 0;
+    epoll->uselen = 0;
     return 0;
 }
 
 int Tcp_Create () {
     struct ConfigData *configdata = GetConfig ();
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP );
     if (fd < 0) {
         printf("create socket fail, in %s, at %d\n", __FILE__, __LINE__);
         return -1;
@@ -77,7 +80,7 @@ int Tcp_Create () {
         close(fd);
         return -3;
     }
-    EPOLL *epoll = add_fd_to_poll(fd);
+    EPOLL *epoll = add_fd_to_poll(fd, 0);
     if (epoll == NULL) {
         close(fd);
         return -4;

@@ -125,8 +125,7 @@ LOOP:
         }
         unsigned char needwill = buff[offset] & 0x04;
         offset += 1;
-        epoll->keepalive = 1.5 * (256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1]);
-        epoll->deadline = epoll->keepalive;
+        epoll->keepalive = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
         offset += 2;
         unsigned short clientidlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
         offset += 2;
@@ -217,7 +216,6 @@ LOOP:
             unsigned char *payload = buff + offset;
             payload[packagelen] = '\0';
             printf("payload：%s, in %s, at %d\n", payload, __FILE__, __LINE__);
-            epoll->deadline = epoll->keepalive;
         } else if (type == PUBACK || type == PUBREC || type == PUBREL || type == PUBCOMP) {
         } else if (type == SUBSCRIBE) {
             if ((buff[0] & 0x0f) != 0x02) {
@@ -245,7 +243,6 @@ LOOP:
                 ackoffset++;
             }
             epoll->write(epoll, suback, suback[1]+2);
-            epoll->deadline = epoll->keepalive;
         } else if (type == UNSUBSCRIBE) {
             if ((buff[0] & 0x0f) != 0x02) {
                 epoll->delete(epoll);
@@ -263,14 +260,12 @@ LOOP:
                 printf("topic: %s, in %s, at %d\n", topic, __FILE__, __LINE__);
             }
             epoll->write(epoll, unsuback, 4);
-            epoll->deadline = epoll->keepalive;
         } else if (type == PINGREQ) {
             if (buff[1] != 0x00 || packagelen != 2) {
                 epoll->delete(epoll);
                 return 0;
             }
             epoll->write(epoll, pingresp, sizeof(pingresp));
-            epoll->deadline = epoll->keepalive;
         } else if (type == DISCONNECT) {
             epoll->delete(epoll);
         } else {

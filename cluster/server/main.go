@@ -18,15 +18,15 @@ var (
     db *sql.DB
 )
 
-const connection            = 0x01
-const clientonline          = 0x02
-const clientoffline         = 0x03
-const subscribe             = 0x04
-const unsubscribe           = 0x05
-const publish               = 0x06
-const ping                  = 0x07
-const pong                  = 0x08
-const disconnectclient      = 0x09
+const connection        = 0x01
+const clientonline      = 0x02
+const clientoffline     = 0x03
+const subscribe         = 0x04
+const unsubscribe       = 0x05
+const publish           = 0x06
+const ping              = 0x07
+const pong              = 0x08
+const disconnectclient  = 0x10
 
 func main () {
     var err error
@@ -80,14 +80,11 @@ func main () {
 }
 
 func HandleConn (conn *net.TCPConn) {
-    defer conn.Close()
+    defer LoseNode(conn)
 
-    var pack []byte
-    var packlen uint32
-    var uselen uint32
-    pack = nil
-    packlen = 0
-    uselen = 0
+    pack := []byte(nil)
+    packlen := uint32(0)
+    uselen := uint32(0)
     state := false
 
     for {
@@ -146,22 +143,34 @@ func HandleConn (conn *net.TCPConn) {
                     if err != nil {
                         fmt.Println(err)
                     }
-                    stmt.Exec(clientid, conn, clientaddr, willtopic, willmsg)
-                    stmt.Close()
+                    _, err = stmt.Exec(clientid, conn, clientaddr, willtopic, willmsg)
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
+                    if err != nil {
+                        fmt.Println(err)
+                    }
                 } else if data[0] == clientoffline {
                     clientaddrlen := uint32(data[offset])
                     offset += 1
                     clientaddr := uint64(0)
-                    for i := 0 ; i < int(clientaddrlen) ; i++ {
-                        clientaddr = (clientaddr<<8) | uint64(data[offset+uint32(i)])
+                    for i := uint32(0) ; i < clientaddrlen ; i++ {
+                        clientaddr = (clientaddr<<8) | uint64(data[offset+i])
                     }
                     offset += clientaddrlen
                     stmt, err := db.Prepare("DELETE FROM `topic` WHERE `nodeaddr` = ? AND `clientaddr` = ?")
                     if err != nil {
                         fmt.Println(err)
                     }
-                    stmt.Exec(conn, clientaddr)
-                    stmt.Close()
+                    _, err = stmt.Exec(conn, clientaddr)
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
+                    if err != nil {
+                        fmt.Println(err)
+                    }
                     stmt, err = db.Prepare("SELECT `willtopic`,`willmsg` FROM `client` WHERE `nodeaddr` = ? AND `clientaddr` = ?")
                     if err != nil {
                         fmt.Println(err)
@@ -170,19 +179,88 @@ func HandleConn (conn *net.TCPConn) {
                     var willtopic string
                     var willmsg []byte
                     err = row.Scan(&willtopic, &willmsg)
+                    if err != nil && err != sql.ErrNoRows {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
                     if err != nil {
                         fmt.Println(err)
                     }
-                    stmt.Close()
                     stmt, err = db.Prepare("DELETE FROM `client` WHERE `nodeaddr` = ? AND `clientaddr` = ?")
                     if err != nil {
                         fmt.Println(err)
                     }
-                    stmt.Exec(conn, clientaddr)
-                    stmt.Close()
+                    _, err = stmt.Exec(conn, clientaddr)
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
+                    if err != nil {
+                        fmt.Println(err)
+                    }
                     PublishData(willtopic, willmsg)
                 } else if data[0] == subscribe {
+                    clientaddrlen := uint32(data[offset])
+                    offset += 1
+                    clientaddr := uint64(0)
+                    for i := uint32(0) ; i < clientaddrlen ; i++ {
+                        clientaddr = (clientaddr<<8) | uint64(data[offset+i])
+                    }
+                    offset += clientaddrlen
+                    topiclen := (uint32(data[offset]) << 8) | uint32(data[offset+1])
+                    offset += 2
+                    topic := string(data[offset:offset+topiclen])
+                    stmt, err := db.Prepare("SELECT COUNT(*) as count FROM `topic` WHERE `topic`= ? AND `nodeaddr` = ? AND `clientaddr` = ?")
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    var count uint64
+                    row := stmt.QueryRow(topic, conn, clientaddr)
+                    err = row.Scan(&count)
+                    if err != nil && err != sql.ErrNoRows {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    if count == 0 {
+                        stmt, err = db.Prepare("INSERT INTO `topic`(`topic`, `nodeaddr`, `clientaddr`)VALUES(?,?,?)")
+                        if err != nil {
+                            fmt.Println(err)
+                        }
+                        _, err = stmt.Exec(topic, conn, clientaddr)
+                        if err != nil {
+                            fmt.Println(err)
+                        }
+                        err = stmt.Close()
+                        if err != nil {
+                            fmt.Println(err)
+                        }
+                    }
                 } else if data[0] == unsubscribe {
+                    clientaddrlen := uint32(data[offset])
+                    offset += 1
+                    clientaddr := uint64(0)
+                    for i := uint32(0) ; i < clientaddrlen ; i++ {
+                        clientaddr = (clientaddr<<8) | uint64(data[offset+i])
+                    }
+                    offset += clientaddrlen
+                    topiclen := (uint32(data[offset]) << 8) | uint32(data[offset+1])
+                    offset += 2
+                    topic := string(data[offset:offset+topiclen])
+                    stmt, err := db.Prepare("DELETE FROM `topic` WHERE `topic`= ? AND `nodeaddr` = ? AND `clientaddr` = ?")
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    _, err = stmt.Exec(topic, conn, clientaddr)
+                    if err != nil {
+                        fmt.Println(err)
+                    }
+                    err = stmt.Close()
+                    if err != nil {
+                        fmt.Println(err)
+                    }
                 } else if data[0] == publish {
                     topiclen := (uint32(data[offset]) << 8) | uint32(data[offset+1])
                     offset += 2
@@ -280,7 +358,7 @@ func GetDataLength (data []byte, num uint32) (uint32, uint32)  {
 func PublishData (topic string, msg []byte) {
     topiclen := uint32(len(topic))
     msglen := uint32(len(msg))
-    if topic == "" || msglen == 0 {
+    if topiclen == 0 || msglen == 0 {
         return
     }
     stmt, err := db.Prepare("SELECT `nodeaddr`,`clientaddr` FROM `topic` WHERE `topic` = ?")
@@ -344,7 +422,10 @@ func PublishData (topic string, msg []byte) {
             nodeaddr.Write(data)
         }
     }
-    stmt.Close()
+    err = stmt.Close()
+    if err != nil {
+        fmt.Println(err)
+    }
 }
 
 func CheckClientId (clientid string) {
@@ -361,7 +442,10 @@ func CheckClientId (clientid string) {
     if err != nil && err != sql.ErrNoRows {
         fmt.Println(err)
     }
-    stmt.Close()
+    err = stmt.Close()
+    if err != nil {
+        fmt.Println(err)
+    }
     if err == nil {
         clientaddrlen := uint64(0)
         tmp := clientaddr
@@ -378,6 +462,32 @@ func CheckClientId (clientid string) {
             clientaddr = clientaddr >> 8
         }
         nodeaddr.Write(data)
-        PublishData(willtopic, willmsg)
+    }
+}
+
+func LoseNode (conn *net.TCPConn) {
+    stmt, err := db.Prepare("DELETE FROM `topic` WHERE `nodeaddr` = ?")
+    if err != nil {
+        fmt.Println(err)
+    }
+    _, err = stmt.Exec(conn)
+    if err != nil {
+        fmt.Println(err)
+    }
+    err = stmt.Close()
+    if err != nil {
+        fmt.Println(err)
+    }
+    stmt, err = db.Prepare("DELETE FROM `client` WHERE `nodeaddr` = ?")
+    if err != nil {
+        fmt.Println(err)
+    }
+    _, err = stmt.Exec(conn)
+    if err != nil {
+        fmt.Println(err)
+    }
+    err = stmt.Close()
+    if err != nil {
+        fmt.Println(err)
     }
 }

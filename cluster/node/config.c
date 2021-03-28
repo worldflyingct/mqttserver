@@ -6,7 +6,14 @@
 #include "cJSON.h"
 #include "config.h"
 
-#define DEFAULTCONFIG   "{\r\n  \"tcpport\": 1883,\r\n  \"wsport\": 9001,\r\n  \"mqttuser\": \"5QdISjSg40jHFyzR\",\r\n  \"mqttkey\": \"QLUL276kqXn55lBK\"\r\n}"
+#define DEFAULTCONFIG   "{\r\n" \
+                        "  \"tcpport\": 1883,\r\n" \
+                        "  \"wsport\": 9001,\r\n" \
+                        "  \"mqttuser\": \"5QdISjSg40jHFyzR\",\r\n" \
+                        "  \"mqttkey\": \"QLUL276kqXn55lBK\",\r\n" \
+                        "  \"serverdomain\": \"localhost\"\r\n" \
+                        "  \"serverport\": 3721\r\n" \
+                        "}"
 
 struct ConfigData configdata;
 
@@ -55,17 +62,21 @@ struct ConfigData* InitConfig () {
     }
     obj = cJSON_GetObjectItem(json, "mqttuser");
     if (obj) {
-        memcpy(configdata.mqttuser, obj->valuestring, 16);
-        configdata.mqttuser[16] = '\0';
+        strncpy(configdata.mqttuser, obj->valuestring, 16);
     } else {
         memcpy(configdata.mqttuser, "QLUL276kqXn55lBK", 17);
     }
     obj = cJSON_GetObjectItem(json, "mqttkey");
     if (obj) {
-        memcpy(configdata.mqttkey, obj->valuestring, 16);
-        configdata.mqttkey[16] = '\0';
+        strncpy(configdata.mqttkey, obj->valuestring, 16);
     } else {
         memcpy(configdata.mqttkey, "QLUL276kqXn55lBK", 17);
+    }
+    obj = cJSON_GetObjectItem(json, "serverdomain");
+    if (obj) {
+        strncpy(configdata.serverdomain, obj->valuestring, 64);
+    } else {
+        memcpy(configdata.mqttkey, "localhost", 10);
     }
     cJSON_Delete(json);
     return &configdata;

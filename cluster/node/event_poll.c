@@ -33,7 +33,7 @@ LOOP:
     goto LOOP;
 }
 
-EPOLL *add_fd_to_poll (int fd) {
+EPOLL *add_fd_to_poll (int fd, int eout) {
     // 设置为非阻塞
     int fdflags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
@@ -51,7 +51,11 @@ EPOLL *add_fd_to_poll (int fd) {
     }
     epoll->fd = fd;
     struct epoll_event ev;
-    ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN;
+    if (eout) {
+        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
+    } else {
+        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN;
+    }
     ev.data.ptr = epoll;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev)) {
         printf("add fd:%d to poll, in %s, at %d\n", fd, __FILE__, __LINE__);
@@ -60,6 +64,22 @@ EPOLL *add_fd_to_poll (int fd) {
         return NULL;
     }
     return epoll;
+}
+
+int mod_fd_at_poll (EPOLL *epoll, int eout) {
+    struct epoll_event ev;
+    if (eout) {
+        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
+    } else {
+        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN;
+    }
+    ev.data.ptr = epoll;
+    int fd = epoll->fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev)) {
+        printf("modify fd:%d to poll, in %s, at %d\n", fd, __FILE__, __LINE__);
+        return -1;
+    }
+    return 0;
 }
 
 void remove_fd_from_poll (EPOLL *epoll) {

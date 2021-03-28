@@ -6,6 +6,8 @@ struct ConfigData {
     unsigned short wsport;
     unsigned char mqttuser[17];
     unsigned char mqttkey[17];
+    unsigned char serverdomain[65];
+    unsigned short serverport;
 };
 
 struct ConfigData* InitConfig ();
