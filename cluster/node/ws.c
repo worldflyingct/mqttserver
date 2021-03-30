@@ -35,22 +35,24 @@ static void Ws_Delete_Connect (EPOLL *epoll) {
     Epoll_Delete(epoll);
 }
 
-static int Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned long len) {
-    unsigned char package[len+10];
-    unsigned int packagelen;
-    unsigned char *wsdata;
-    package[0] = 0x82;
+static void Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned long len) {
     if (len < 0x7e) {
+        unsigned char package[len+2];
+        package[0] = 0x82;
         package[1] = len;
-        wsdata = package + 2;
-        packagelen = len + 2;
+        memcpy(package + 2, data, len);
+        Epoll_Write(epoll, package, len + 2);
     } else if (len < 0x10000) {
+        unsigned char package[len+4];
+        package[0] = 0x82;
         package[1] = 0x7e;
         package[2] = len >> 8;
         package[3] = len;
-        wsdata = package + 4;
-        packagelen = len + 4;
+        memcpy(package + 4, data, len);
+        Epoll_Write(epoll, package, len + 4);
     } else {
+        unsigned char package[len+10];
+        package[0] = 0x82;
         package[1] = 0x7f;
         package[2] = len >> 56;
         package[3] = len >> 48;
@@ -60,17 +62,15 @@ static int Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned l
         package[7] = len >> 16;
         package[8] = len >> 8;
         package[9] = len;
-        wsdata = package + 10;
-        packagelen = len + 10;
+        memcpy(package + 10, data, len);
+        Epoll_Write(epoll, package, len + 10);
     }
-    memcpy(wsdata, data, len);
-    write(epoll->fd, package, packagelen);
 }
 
-static int Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
+static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
     ssize_t len = read(epoll->fd, buff, 512*1024);
     if (len < 0) {
-        return -1;
+        return;
     }
     if (!epoll->wsstate) {
         char *method, *path, *version;
@@ -81,7 +81,7 @@ static int Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             printf("Parse Http Header fail, in %s, at %d\n", __FILE__, __LINE__);
             write(epoll->fd, ERRORPAGE, sizeof(ERRORPAGE));
             Ws_Delete_Connect(epoll);
-            return -2;
+            return;
         }
         int k = -1;
         int p = -1;
@@ -100,13 +100,13 @@ static int Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             printf("not found Sec-WebSocket-Key, in %s, at %d\n", __FILE__, __LINE__);
             write(epoll->fd, ERRORPAGE, sizeof(ERRORPAGE));
             Ws_Delete_Connect(epoll);
-            return -3;
+            return;
         }
         if (p == -1) {
             printf("not found Sec-WebSocket-Protocol, in %s, at %d\n", __FILE__, __LINE__);
             write(epoll->fd, ERRORPAGE, sizeof(ERRORPAGE));
             Ws_Delete_Connect(epoll);
-            return -4;
+            return;
         }
         char input[64];
         int keylen = strlen(httpparam[k].value);
@@ -123,16 +123,15 @@ static int Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
         if (write(epoll->fd, s, res_len) < 0) {
             printf("write fail, in %s, at %d\n", __FILE__, __LINE__);
             Ws_Delete_Connect(epoll);
-            return -5;
+            return;
         }
         epoll->wsstate = 1;
-        return 0;
     } else {
         if (epoll->wspackagelen) {
             memcpy(epoll->wspackage + epoll->wsuselen, buff, len);
             epoll->wsuselen += len;
             if (epoll->wsuselen < epoll->wspackagelen) {
-                return 0;
+                return;
             }
             memcpy(buff, epoll->wspackage, epoll->wsuselen);
             len = epoll->wsuselen;
@@ -147,7 +146,7 @@ LOOP:
         if (len < 2) {
             printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
             Ws_Delete_Connect(epoll);
-            return -6;
+            return;
         }
         unsigned int datalen = buff[1] & 0x7f;
         if (buff[1] & 0x80) {
@@ -159,7 +158,7 @@ LOOP:
                 if (len < 4) {
                     printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Ws_Delete_Connect(epoll);
-                    return -7;
+                    return;
                 }
                 mask = buff + 4;
                 data = mask + 4;
@@ -169,7 +168,7 @@ LOOP:
                 if (len < 10) {
                     printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Ws_Delete_Connect(epoll);
-                    return -8;
+                    return;
                 }
                 mask = buff + 6;
                 data = mask + 4;
@@ -185,7 +184,7 @@ LOOP:
                 if (len < 4) {
                     printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Ws_Delete_Connect(epoll);
-                    return -9;
+                    return;
                 }
                 data = buff + 4;
                 datalen = ((unsigned short)buff[2] << 8) | (unsigned short)buff[3];
@@ -194,7 +193,7 @@ LOOP:
                 if (len < 10) {
                     printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Ws_Delete_Connect(epoll);
-                    return -10;
+                    return;
                 }
                 data = buff + 6;
                 datalen = ((unsigned long)buff[2] << 56) | ((unsigned long)buff[3] << 48) | ((unsigned long)buff[4] << 40) | ((unsigned long)buff[5] << 32) | ((unsigned long)buff[6] << 24) | ((unsigned long)buff[7] << 16) | ((unsigned long)buff[8] << 8) | (unsigned long)buff[9];
@@ -206,12 +205,12 @@ LOOP:
             if (epoll->wspackage == NULL) {
                 printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Ws_Delete_Connect(epoll);
-                return -11;
+                return;
             }
             memcpy(epoll->wspackage, buff, len);
             epoll->wspackagelen = packagelen;
             epoll->wsuselen = len;
-            return 0;
+            return;
         }
         if (mask) {
             for (unsigned int i = 0 ; i < datalen ; i++) {
@@ -238,27 +237,26 @@ LOOP:
             printf("0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x, in %s, at %d\n", buff[0], buff[1], buff[2], buff[3], buff[4], buff[5], __FILE__, __LINE__);
         }
         if (packagelen == len) {
-            return 0;
+            return;
         }
         len -= packagelen;
         memcpy(buff, buff + packagelen, len);
         goto LOOP;
     }
-    return 0;
 }
 
-static int Ws_New_Connect (EPOLL *e, unsigned char *buff) {
+static void Ws_New_Connect (EPOLL *e, unsigned char *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);
     if (fd < 0) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
-        return -1;
+        return;
     }
     EPOLL *epoll = add_fd_to_poll(fd, 0);
     if (epoll == NULL) {
         close(fd);
-        return -2;
+        return;
     }
     epoll->read = Ws_Read_Handler;
     epoll->write = Ws_Write_Connect;
@@ -274,7 +272,6 @@ static int Ws_New_Connect (EPOLL *e, unsigned char *buff) {
     epoll->wsuselen = 0;
     epoll->wsstate = 0;
     epoll->subscribelist = NULL;
-    return 0;
 }
 
 int Ws_Create () {

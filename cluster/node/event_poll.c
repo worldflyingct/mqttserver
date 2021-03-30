@@ -99,11 +99,11 @@ static int Epoll_Event (int event, EPOLL *epoll) {
     }
 }
 
-int Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
+void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
     if (epoll->writeenable) {
         ssize_t res = write(epoll->fd, data, len);
         if (res == len) {
-            return 0;
+            return;
         }
         unsigned long bufflen;
         if (res <= 0) {

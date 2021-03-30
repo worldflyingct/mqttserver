@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "event_poll.h"
 #include "mqtt.h"
 #include "config.h"
-#include "event_poll.h"
 #include "sha256.h"
 
 static const unsigned char connsuccess[]   = {CONNACK, 0x02, 0x00, 0x00};

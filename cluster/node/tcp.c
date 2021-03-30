@@ -8,28 +8,27 @@
 #include "config.h"
 #include "mqtt.h"
 
-static int Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
+static void Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
     ssize_t len = read(epoll->fd, buff, 512*1024);
     if (len < 0) {
-        return -1;
+        return;
     }
     HandleMqttClientRequest(epoll, buff, len);
-    return 0;
 }
 
-static int Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
+static void Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);
     if (fd < 0) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
-        return -1;
+        return;
     }
     EPOLL *epoll = add_fd_to_poll(fd, 0);
     if (epoll == NULL) {
         printf("add fd to poll fail, in %s, at %d\n", __FILE__, __LINE__);
         close(fd);
-        return -2;
+        return;
     }
     epoll->read = Tcp_Read_Handler;
     epoll->write = Epoll_Write;
@@ -41,7 +40,6 @@ static int Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
     epoll->buff = NULL;
     epoll->bufflen = 0;
     epoll->subscribelist = NULL;
-    return 0;
 }
 
 int Tcp_Create () {

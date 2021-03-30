@@ -19,8 +19,8 @@
 #include <sys/epoll.h>
 
 typedef struct EPOLL EPOLL;
-typedef int READ_FUNCTION (EPOLL *epoll, unsigned char *buff);
-typedef int WRITE_FUNCTION (EPOLL *epoll, const unsigned char *data, unsigned long len);
+typedef void READ_FUNCTION (EPOLL *epoll, unsigned char *buff);
+typedef void WRITE_FUNCTION (EPOLL *epoll, const unsigned char *data, unsigned long len);
 typedef void DELETE_FUNCTION (EPOLL *epoll);
 
 struct EPOLL {
@@ -50,7 +50,7 @@ int event_poll_create ();
 void event_poll_loop ();
 EPOLL *add_fd_to_poll (int fd, int eout);
 int mod_fd_at_poll (EPOLL *epoll, int eout);
-int Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
+void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
 void Epoll_Delete (EPOLL *epoll);
 
 #endif
