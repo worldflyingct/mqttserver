@@ -78,6 +78,7 @@ struct ConfigData* InitConfig () {
     } else {
         memcpy(configdata.mqttkey, "localhost", 10);
     }
+    configdata.regok = 0;
     cJSON_Delete(json);
     return &configdata;
 }

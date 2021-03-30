@@ -4,10 +4,11 @@
 struct ConfigData {
     unsigned short tcpport;
     unsigned short wsport;
-    unsigned char mqttuser[17];
-    unsigned char mqttkey[17];
+    unsigned char mqttuser[33];
+    unsigned char mqttkey[33];
     unsigned char serverdomain[65];
     unsigned short serverport;
+    unsigned char regok;
 };
 
 struct ConfigData* InitConfig ();

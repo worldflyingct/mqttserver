@@ -1,6 +1,6 @@
 #ifndef __CONNECT_H__
 #define __CONNECT_H__
 
-int Connect_Create ();
+int SendData (unsigned char *data, unsigned int datalen);
 
 #endif

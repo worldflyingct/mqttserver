@@ -7,34 +7,12 @@
 #include "event_poll.h"
 #include "config.h"
 
-static int Connect_Event_Function (int event, EPOLL *epoll, unsigned char *buff) {
-    if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
-        Connect_Delete_Function(epoll);
-    } else if (event & EPOLLOUT) {
-        if (epoll->bufflen > 0) {
-            ssize_t res = write(epoll->fd, epoll->buff, epoll->bufflen);
-            if (res == epoll->bufflen) {
-                free(epoll->buff);
-                epoll->buff = NULL;
-                epoll->bufflen = 0;
-                mod_fd_at_poll(epoll, 0);
-                epoll->writeenable = 1;
-            } else if ( 0 < res && res < epoll->bufflen) {
-                unsigned long bufflen = epoll->bufflen - res;
-                unsigned char *buff = (unsigned char*)malloc(bufflen);
-                memcpy(buff, epoll->buff + res, bufflen);
-                free(epoll->buff);
-                epoll->buff = buff;
-                epoll->bufflen = bufflen;
-            }
-        }
-    } else {
-        ssize_t res = read(epoll->fd, buff, 512*1024);
-        if (res <= 0) {
-
-        }
+static int Connect_Delete_Function (EPOLL *epoll) {
+    if (epoll->bufflen) {
+        free(epoll->buff);
+        epoll->buff = NULL;
     }
-    return 0;
+    remove_fd_from_poll(epoll);
 }
 
 static int Connect_Write_Function (EPOLL *epoll, const unsigned char *data, unsigned long len) {
@@ -66,15 +44,44 @@ static int Connect_Write_Function (EPOLL *epoll, const unsigned char *data, unsi
     }
 }
 
-static int Connect_Delete_Function (EPOLL *epoll) {
-    if (epoll->bufflen) {
-        free(epoll->buff);
-        epoll->buff = NULL;
+static int Connect_Event_Function (int event, EPOLL *epoll, unsigned char *buff) {
+    if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
+        Connect_Delete_Function(epoll);
+    } else if (event & EPOLLOUT) {
+        if (epoll->bufflen > 0) {
+            ssize_t res = write(epoll->fd, epoll->buff, epoll->bufflen);
+            if (res == epoll->bufflen) {
+                free(epoll->buff);
+                epoll->buff = NULL;
+                epoll->bufflen = 0;
+                mod_fd_at_poll(epoll, 0);
+                epoll->writeenable = 1;
+            } else if ( 0 < res && res < epoll->bufflen) {
+                unsigned long bufflen = epoll->bufflen - res;
+                unsigned char *buff = (unsigned char*)malloc(bufflen);
+                memcpy(buff, epoll->buff + res, bufflen);
+                free(epoll->buff);
+                epoll->buff = buff;
+                epoll->bufflen = bufflen;
+            }
+        }
+    } else {
+        ssize_t res = read(epoll->fd, buff, 512*1024);
+        if (res > 0) {
+            if (buff[0] == CONNACK) {
+                unsigned char connsuccess[]   = {0x02, 0x00, 0x00};
+                if (res == 4 && !memcmp(buff+1, connsuccess, sizeof(connsuccess)) {
+                    struct ConfigData *configdata = GetConfig();
+                    configdata->regok = 1;
+                }
+            }
+            Connect_Delete_Function(epoll);
+        }
     }
-    remove_fd_from_poll(epoll);
+    return 0;
 }
 
-int Connect_Create () {
+int SendData (unsigned char *data, unsigned int datalen) {
     int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     EPOLL *epoll = add_fd_to_poll(fd, 1);
     if (epoll == NULL) {
@@ -108,15 +115,14 @@ int Connect_Create () {
     epoll->buff = NULL;
     epoll->bufflen = 0;
     epoll->uselen = 0;
-    epoll->nodestate = 0;
     epoll->writeenable = 0;
     struct ConfigData *configdata = GetConfig();
-    unsigned char data[128];
+    unsigned char pack[256+datalen];
     unsigned char out[32];
     time_t timestamp = time(NULL);
-    int len = sprintf(data, "%s&%u&%s", configdata->mqttuser, timestamp, configdata->mqttkey);
-    sha256(data, len, out);
-    len = sprintf(data, "%s&%u&" \
+    int len = sprintf(pack, "%s&%u&%s", configdata->mqttuser, timestamp, configdata->mqttkey);
+    sha256(pack, len, out);
+    len = sprintf(pack, "%s&%u&" \
                             "%02x%02x%02x%02x%02x%02x%02x%02x" \
                             "%02x%02x%02x%02x%02x%02x%02x%02x" \
                             "%02x%02x%02x%02x%02x%02x%02x%02x" \
@@ -127,5 +133,6 @@ int Connect_Create () {
                             out[16], out[17], out[18], out[19], out[20], out[21], out[22],
                             out[23], out[24], out[25], out[26], out[27], out[28], out[29],
                             out[30], out[31]);
-    epoll->write(epoll, data, len);
+    memcpy(pack+len, data, datalen);
+    epoll->write(epoll, pack, len+datalen);
 }

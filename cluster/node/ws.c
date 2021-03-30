@@ -30,9 +30,9 @@ static int ParseHttpHeader (char* str,
                                 struct HTTPPARAM *httpparam,
                                 unsigned int *httpparam_size);
 
-static int Ws_Delete_Connect (EPOLL *epoll) {
+static void Ws_Delete_Connect (EPOLL *epoll) {
     write(epoll->fd, disconn, sizeof(disconn));
-    remove_fd_from_poll(epoll);
+    Epoll_Delete(epoll);
 }
 
 static int Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned long len) {
@@ -67,11 +67,7 @@ static int Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned l
     write(epoll->fd, package, packagelen);
 }
 
-static int Ws_Event_Handler (int event, EPOLL *epoll, unsigned char *buff) {
-    if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
-        Ws_Delete_Connect(epoll);
-        return 0;
-    }
+static int Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
     ssize_t len = read(epoll->fd, buff, 512*1024);
     if (len < 0) {
         return -1;
@@ -143,7 +139,6 @@ static int Ws_Event_Handler (int event, EPOLL *epoll, unsigned char *buff) {
             epoll->wsuselen = 0;
             epoll->wspackagelen = 0;
             free(epoll->wspackage);
-            epoll->wspackage = NULL;
         }
         unsigned char *mask;
         unsigned char *data;
@@ -252,7 +247,7 @@ LOOP:
     return 0;
 }
 
-static int Ws_New_Connect (int event, EPOLL *e, unsigned char *buff) {
+static int Ws_New_Connect (EPOLL *e, unsigned char *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);
@@ -265,7 +260,7 @@ static int Ws_New_Connect (int event, EPOLL *e, unsigned char *buff) {
         close(fd);
         return -2;
     }
-    epoll->func = Ws_Event_Handler;
+    epoll->read = Ws_Read_Handler;
     epoll->write = Ws_Write_Connect;
     epoll->delete = Ws_Delete_Connect;
     epoll->mqttstate = 0;
@@ -274,11 +269,11 @@ static int Ws_New_Connect (int event, EPOLL *e, unsigned char *buff) {
     epoll->mqttuselen = 0;
     epoll->buff = NULL;
     epoll->bufflen = 0;
-    epoll->uselen = 0;
     epoll->wspackage = NULL;
     epoll->wspackagelen = 0;
     epoll->wsuselen = 0;
     epoll->wsstate = 0;
+    epoll->subscribelist = NULL;
     return 0;
 }
 
@@ -312,7 +307,7 @@ int Ws_Create () {
         return -4;
     }
     epoll->fd = fd;
-    epoll->func = Ws_New_Connect;
+    epoll->read = Ws_New_Connect;
     return 0;
 }
 

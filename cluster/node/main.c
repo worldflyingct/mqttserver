@@ -17,9 +17,6 @@ int main () {
     if (Ws_Create()) {
         return -4;
     }
-    if (Connect_Create()) {
-        return -5;
-    }
     event_poll_loop();
     return 0;
 }

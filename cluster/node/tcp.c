@@ -8,19 +8,7 @@
 #include "config.h"
 #include "mqtt.h"
 
-static int Tcp_Delete_Connect (EPOLL *epoll) {
-    remove_fd_from_poll(epoll);
-}
-
-static int Tcp_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned long len) {
-    write(epoll->fd, data, len);
-}
-
-static int Tcp_Event_Handler (int event, EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
-    if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
-        Tcp_Delete_Connect(epoll);
-        return 0;
-    }
+static int Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
     ssize_t len = read(epoll->fd, buff, 512*1024);
     if (len < 0) {
         return -1;
@@ -29,7 +17,7 @@ static int Tcp_Event_Handler (int event, EPOLL *epoll, unsigned char *buff) { //
     return 0;
 }
 
-static int Tcp_New_Connect (int event, EPOLL *e, unsigned char *buff) {
+static int Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);
@@ -43,16 +31,16 @@ static int Tcp_New_Connect (int event, EPOLL *e, unsigned char *buff) {
         close(fd);
         return -2;
     }
-    epoll->func = Tcp_Event_Handler;
-    epoll->write = Tcp_Write_Connect;
-    epoll->delete = Tcp_Delete_Connect;
+    epoll->read = Tcp_Read_Handler;
+    epoll->write = Epoll_Write;
+    epoll->delete = Epoll_Delete;
     epoll->mqttstate = 0;
     epoll->mqttpackage = NULL;
     epoll->mqttpackagelen = 0;
     epoll->mqttuselen = 0;
     epoll->buff = NULL;
     epoll->bufflen = 0;
-    epoll->uselen = 0;
+    epoll->subscribelist = NULL;
     return 0;
 }
 
@@ -85,6 +73,6 @@ int Tcp_Create () {
         close(fd);
         return -4;
     }
-    epoll->func = Tcp_New_Connect;
+    epoll->read = Tcp_New_Connect;
     return 0;
 }

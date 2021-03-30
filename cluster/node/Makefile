@@ -7,7 +7,7 @@ node: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha
 main.o: main.c event_poll.h ws.h config.h
 	$(CC) $(CFLAGS) -c -o $@ main.c
 
-mqtt.o: mqtt.c event_poll.h sha256.h
+mqtt.o: mqtt.c mqtt.h event_poll.h sha256.h
 	$(CC) $(CFLAGS) -c -o $@ mqtt.c
 
 ws.o: ws.c event_poll.h mqtt.h config.h sha1.h base64.h
