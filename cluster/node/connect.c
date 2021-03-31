@@ -83,7 +83,7 @@ static int Connect_Event_Function (int event, EPOLL *epoll, unsigned char *buff)
 
 int SendData (unsigned char *data, unsigned int datalen) {
     int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    EPOLL *epoll = add_fd_to_poll(fd, 1);
+    EPOLL *epoll = add_fd_to_poll(fd);
     if (epoll == NULL) {
         close(fd);
         return -1;

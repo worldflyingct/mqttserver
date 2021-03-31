@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-std=gnu99 -O3 -static
 
-node: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o
+uit: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o
 	$(CC) $(CFLAGS) -o $@ $^
 
 main.o: main.c event_poll.h ws.h config.h
@@ -16,7 +16,7 @@ ws.o: ws.c event_poll.h mqtt.h config.h sha1.h base64.h
 tcp.o: tcp.c event_poll.h mqtt.h config.h
 	$(CC) $(CFLAGS) -c -o $@ tcp.c
 
-event_poll.o: event_poll.c event_poll.h
+event_poll.o: event_poll.c event_poll.h mqtt.h
 	$(CC) $(CFLAGS) -c -o $@ event_poll.c
 
 config.o: config.c config.h cJSON.h

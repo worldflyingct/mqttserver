@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <fcntl.h>
@@ -6,13 +7,17 @@
 #include "cJSON.h"
 #include "config.h"
 
-#define DEFAULTCONFIG   "{\r\n" \
-                        "  \"tcpport\": 1883,\r\n" \
-                        "  \"wsport\": 9001,\r\n" \
-                        "  \"mqttuser\": \"5QdISjSg40jHFyzR\",\r\n" \
-                        "  \"mqttkey\": \"QLUL276kqXn55lBK\",\r\n" \
-                        "  \"serverdomain\": \"localhost\"\r\n" \
-                        "  \"serverport\": 3721\r\n" \
+#define TCPPORT         "1883"
+#define WSPORT          "80"
+#define MQTTUSER        "5QdISjSg40jHFyzR"
+#define MQTTKEY         "QLUL276kqXn55lBK"
+#define DEFAULTCONFIG   "{\n" \
+                        "  \"tcpport\": "TCPPORT",\n" \
+                        "  \"wsport\": "WSPORT",\n" \
+                        "  \"mqttuser\": \""MQTTUSER"\",\n" \
+                        "  \"mqttkey\": \""MQTTKEY"\",\n" \
+                        "  \"serverdomain\": \"localhost\",\n" \
+                        "  \"serverport\": 80\r\n" \
                         "}"
 
 struct ConfigData configdata;
@@ -21,8 +26,10 @@ struct ConfigData* InitConfig () {
     uint8_t buff[512];
     int fd = open("config.json", O_RDONLY);
     if (fd < 0) {
-        configdata.tcpport = 1883;
-        configdata.wsport = 9001;
+        configdata.tcpport = atoi(TCPPORT);
+        configdata.wsport = atoi(WSPORT);
+        strcpy(configdata.mqttuser, MQTTUSER);
+        strcpy(configdata.mqttkey, MQTTKEY);
         fd = open("config.json", O_CREAT|O_WRONLY, 0777);
         if (fd < 0) {
             printf("init config file error.");

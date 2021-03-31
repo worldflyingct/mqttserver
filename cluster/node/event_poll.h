@@ -17,11 +17,23 @@
 #define DISCONNECT      0xe0
 
 #include <sys/epoll.h>
+#include "ws.h"
 
 typedef struct EPOLL EPOLL;
 typedef void READ_FUNCTION (EPOLL *epoll, unsigned char *buff);
 typedef void WRITE_FUNCTION (EPOLL *epoll, const unsigned char *data, unsigned long len);
 typedef void DELETE_FUNCTION (EPOLL *epoll);
+
+struct HTTPHEAD {
+    char *httpmethod;
+    char *httppath;
+    char *httpversion;
+    struct HTTPPARAM httpparam[30];
+    unsigned long httpparam_size;
+    int k;
+    int p;
+    int headlen;
+};
 
 struct EPOLL {
     int fd;
@@ -31,24 +43,28 @@ struct EPOLL {
     unsigned char *buff;
     unsigned long bufflen;
     unsigned long writeenable;
+    EPOLL *thead;
+    EPOLL *ttail;
     EPOLL *head;
     EPOLL *tail;
+    struct HTTPHEAD *httphead;
     unsigned char mqttstate; // 0为未注，1为注册
     unsigned char *mqttpackage;
     unsigned long mqttpackagelen; // 当前包的理论大小
     unsigned long mqttuselen; // 已经消耗的缓存
+    unsigned char *clientid;
+    unsigned short clientidlen;
     struct SubScribeList *subscribelist;
     unsigned short keepalive;
     unsigned char wsstate; // 0为未注，1为注册
     unsigned char *wspackage;
     unsigned long wspackagelen; // 当前包的理论大小
     unsigned long wsuselen; // 已经消耗的缓存
-    unsigned char nodestate; // 0为未注，1为注册
 };
 
 int event_poll_create ();
 void event_poll_loop ();
-EPOLL *add_fd_to_poll (int fd, int eout);
+EPOLL *add_fd_to_poll (int fd);
 int mod_fd_at_poll (EPOLL *epoll, int eout);
 void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
 void Epoll_Delete (EPOLL *epoll);

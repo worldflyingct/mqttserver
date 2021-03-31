@@ -24,7 +24,7 @@ static void Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
         return;
     }
-    EPOLL *epoll = add_fd_to_poll(fd, 0);
+    EPOLL *epoll = add_fd_to_poll(fd);
     if (epoll == NULL) {
         printf("add fd to poll fail, in %s, at %d\n", __FILE__, __LINE__);
         close(fd);
@@ -32,14 +32,6 @@ static void Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
     }
     epoll->read = Tcp_Read_Handler;
     epoll->write = Epoll_Write;
-    epoll->delete = Epoll_Delete;
-    epoll->mqttstate = 0;
-    epoll->mqttpackage = NULL;
-    epoll->mqttpackagelen = 0;
-    epoll->mqttuselen = 0;
-    epoll->buff = NULL;
-    epoll->bufflen = 0;
-    epoll->subscribelist = NULL;
 }
 
 int Tcp_Create () {
@@ -66,7 +58,7 @@ int Tcp_Create () {
         close(fd);
         return -3;
     }
-    EPOLL *epoll = add_fd_to_poll(fd, 0);
+    EPOLL *epoll = add_fd_to_poll(fd);
     if (epoll == NULL) {
         close(fd);
         return -4;

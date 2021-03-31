@@ -6,6 +6,7 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include "event_poll.h"
+#include "mqtt.h"
 
 #define MAXEVENTS      2048
 
@@ -14,24 +15,28 @@ static unsigned char buffer[512*1024];
 static int epollfd = 0;
 static int wait_count;
 static struct epoll_event evs[MAXEVENTS];
+EPOLL *remainepollhead = NULL;
 
-EPOLL *add_fd_to_poll (int fd, int eout) {
+EPOLL *add_fd_to_poll (int fd) {
     // 设置为非阻塞
     int fdflags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
 
-    EPOLL *epoll = (EPOLL*)malloc(sizeof(EPOLL));
-    if (epoll == NULL) {
-        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-        return NULL;
+    EPOLL *epoll;
+    if (remainepollhead) {
+        epoll = remainepollhead;
+        remainepollhead = remainepollhead->tail;
+    } else {
+        epoll = (EPOLL*)malloc(sizeof(EPOLL));
+        if (epoll == NULL) {
+            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+            return NULL;
+        }
     }
+    memset(epoll, 0, sizeof(EPOLL));
     epoll->fd = fd;
     struct epoll_event ev;
-    if (eout) {
-        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
-    } else {
-        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN;
-    }
+    ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
     ev.data.ptr = epoll;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev)) {
         printf("add fd:%d to poll, in %s, at %d\n", fd, __FILE__, __LINE__);
@@ -58,44 +63,69 @@ int mod_fd_at_poll (EPOLL *epoll, int eout) {
 }
 
 void Epoll_Delete (EPOLL *epoll) {
+    if (epoll->mqttstate) {
+        DeleteMqttClient(epoll);
+    }
     struct epoll_event ev;
+    printf("fd:%d, in %s, at %d\n", epoll->fd, __FILE__, __LINE__);
     epoll_ctl(epollfd, EPOLL_CTL_DEL, epoll->fd, &ev);
     close(epoll->fd);
     if (epoll->bufflen) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
         free(epoll->buff);
     }
     if (epoll->mqttpackagelen) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
         free(epoll->mqttpackage);
     }
+    if (epoll->clientidlen) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
+        free(epoll->clientid);
+    }
+    if (epoll->httphead) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
+        free(epoll->httphead);
+    }
     if (epoll->wspackagelen) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
         free(epoll->wspackage);
     }
-    free(epoll);
+    epoll->fd = 0;
+    epoll->tail = remainepollhead;
+    remainepollhead = epoll;
 }
 
 static int Epoll_Event (int event, EPOLL *epoll) {
-    if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
-        epoll->delete(epoll);
-    } else if (event & EPOLLOUT) {
-        if (epoll->bufflen > 0) {
-            ssize_t res = write(epoll->fd, epoll->buff, epoll->bufflen);
-            if (res == epoll->bufflen) {
-                free(epoll->buff);
-                epoll->buff = NULL;
-                epoll->bufflen = 0;
+    if (epoll->fd) {
+        if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
+            printf("in %s, at %d\n", __FILE__, __LINE__);
+            Epoll_Delete(epoll);
+        } else if (event & EPOLLOUT) {
+            printf("in %s, at %d\n", __FILE__, __LINE__);
+            epoll->writeenable = 1;
+            if (epoll->bufflen > 0) {
+                ssize_t res = write(epoll->fd, epoll->buff, epoll->bufflen);
+                if (res == epoll->bufflen) {
+                    free(epoll->buff);
+                    epoll->buff = NULL;
+                    epoll->bufflen = 0;
+                    mod_fd_at_poll(epoll, 0);
+                } else if ( 0 <= res && res < epoll->bufflen) {
+                    unsigned long bufflen = epoll->bufflen - res;
+                    unsigned char *buff = (unsigned char*)malloc(bufflen);
+                    memcpy(buff, epoll->buff + res, bufflen);
+                    free(epoll->buff);
+                    epoll->buff = buff;
+                    epoll->bufflen = bufflen;
+                    epoll->writeenable = 0;
+                }
+            } else {
                 mod_fd_at_poll(epoll, 0);
-                epoll->writeenable = 1;
-            } else if ( 0 < res && res < epoll->bufflen) {
-                unsigned long bufflen = epoll->bufflen - res;
-                unsigned char *buff = (unsigned char*)malloc(bufflen);
-                memcpy(buff, epoll->buff + res, bufflen);
-                free(epoll->buff);
-                epoll->buff = buff;
-                epoll->bufflen = bufflen;
             }
+        } else {
+            printf("in %s, at %d\n", __FILE__, __LINE__);
+            epoll->read(epoll, buffer);
         }
-    } else {
-        epoll->read(epoll, buffer);
     }
 }
 
@@ -142,6 +172,7 @@ int event_poll_create () {
 void event_poll_loop () {
 LOOP:
     wait_count = epoll_wait(epollfd, evs, MAXEVENTS, -1);
+    printf("wait_count:%d, in %s, at %d\n", wait_count, __FILE__, __LINE__);
     for (int i = 0 ; i < wait_count ; i++) {
         EPOLL *epoll = evs[i].data.ptr;
         Epoll_Event(evs[i].events, epoll);
