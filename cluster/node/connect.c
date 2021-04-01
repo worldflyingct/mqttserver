@@ -72,7 +72,7 @@ static int Connect_Event_Function (int event, EPOLL *epoll, unsigned char *buff)
                 unsigned char connsuccess[]   = {0x02, 0x00, 0x00};
                 if (res == 4 && !memcmp(buff+1, connsuccess, sizeof(connsuccess)) {
                     struct ConfigData *configdata = GetConfig();
-                    configdata->regok = 1;
+                    // configdata->regok = 1;
                 }
             }
             Connect_Delete_Function(epoll);

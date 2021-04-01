@@ -93,20 +93,50 @@ void Epoll_Delete (EPOLL *epoll) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         free(epoll->wspackage);
     }
+    if (epoll->tls) {
+        // printf("in %s, at %d\n", __FILE__, __LINE__);
+        SSL_shutdown(epoll->tls);
+        SSL_free(epoll->tls);
+    }
     epoll->tail = remainepollhead;
     remainepollhead = epoll;
 }
 
-static int Epoll_Event (int event, EPOLL *epoll) {
+static void Epoll_Event (int event, EPOLL *epoll) {
     if (epoll->fd) {
         if (event & (EPOLLERR|EPOLLHUP|EPOLLRDHUP)) { // 错误异常处理
             // printf("in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
+        } else if (epoll->tls && !epoll->tlsok) {
+            int r_code = SSL_accept(epoll->tls);
+            if(r_code == 1) {
+                epoll->tlsok = 1;
+                if (epoll->writeenable) {
+                    mod_fd_at_poll(epoll, 1);
+                    epoll->writeenable = 0;
+                }
+            } else {
+                int errcode = SSL_get_error(epoll->tls, r_code);
+                if (errcode == SSL_ERROR_WANT_READ) {
+                    mod_fd_at_poll(epoll, 0);
+                    epoll->writeenable = 1;
+                } else if (errcode == SSL_ERROR_WANT_WRITE) {
+                    mod_fd_at_poll(epoll, 1);
+                    epoll->writeenable = 0;
+                } else {
+                    Epoll_Delete(epoll);
+                }
+            }
         } else if (event & EPOLLOUT) {
             // printf("in %s, at %d\n", __FILE__, __LINE__);
             epoll->writeenable = 1;
             if (epoll->bufflen > 0) {
-                ssize_t res = write(epoll->fd, epoll->buff, epoll->bufflen);
+                ssize_t res;
+                if (epoll->tls) {
+                    res = SSL_write(epoll->tls, epoll->buff, epoll->bufflen);
+                } else {
+                    res = write(epoll->fd, epoll->buff, epoll->bufflen);
+                }
                 if (res == epoll->bufflen) {
                     free(epoll->buff);
                     epoll->buff = NULL;
@@ -133,7 +163,12 @@ static int Epoll_Event (int event, EPOLL *epoll) {
 
 void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
     if (epoll->writeenable) {
-        ssize_t res = write(epoll->fd, data, len);
+        ssize_t res;
+        if (epoll->tls) {
+            res = SSL_write(epoll->tls, data, len);
+        } else {
+            res = write(epoll->fd, data, len);
+        }
         if (res == len) {
             return;
         }

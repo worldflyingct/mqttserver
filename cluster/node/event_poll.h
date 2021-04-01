@@ -17,6 +17,7 @@
 #define DISCONNECT      0xe0
 
 #include <sys/epoll.h>
+#include <openssl/ssl.h>
 #include "ws.h"
 
 typedef struct EPOLL EPOLL;
@@ -47,7 +48,8 @@ struct EPOLL {
     EPOLL *ttail;
     EPOLL *head;
     EPOLL *tail;
-    struct HTTPHEAD *httphead;
+    SSL *tls;
+    unsigned char tlsok; // 0为尚未握手成功，1为握手成功
     unsigned char mqttstate; // 0为未注，1为注册
     unsigned char *mqttpackage;
     unsigned long mqttpackagelen; // 当前包的理论大小
@@ -58,8 +60,9 @@ struct EPOLL {
     unsigned short mqttwilltopiclen;
     unsigned char *mqttwillmsg;
     unsigned short mqttwillmsglen;
-    struct SubScribeList *subscribelist;
+    struct SubScribeList *sbbl;
     unsigned short keepalive;
+    struct HTTPHEAD *httphead;
     unsigned char wsstate; // 0为未注，1为注册
     unsigned char *wspackage;
     unsigned long wspackagelen; // 当前包的理论大小

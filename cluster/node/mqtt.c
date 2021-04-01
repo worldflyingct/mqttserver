@@ -35,9 +35,26 @@ void ShowClients () {
     }
 }
 
+void SendToClient (unsigned char *buff, unsigned long packagelen, unsigned char *topic, unsigned long topiclen) {
+    struct TopicList *topiclist = topiclisthead;
+    while (topiclist != NULL) {
+        if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
+            break;
+        }
+        topiclist = topiclist->tail;
+    }
+    if (topiclist != NULL) {
+        EPOLL *epoll = topiclist->epoll;
+        while (epoll != NULL) {
+            epoll->write(epoll, buff, packagelen);
+            epoll = epoll->ttail;
+        }
+    }
+}
+
 void PublishData (unsigned char *topic, unsigned long topiclen, unsigned char *msg, unsigned long msglen, unsigned char *buff) {
     unsigned long len = 2 + topiclen + msglen;
-    unsigned char packagelen;
+    unsigned long packagelen;
     unsigned long offset;
     if (len < 127) {
         packagelen = len + 2;
@@ -66,27 +83,14 @@ void PublishData (unsigned char *topic, unsigned long topiclen, unsigned char *m
     memcpy(buff + offset, topic, topiclen);
     offset += topiclen;
     memcpy(buff + offset, msg, msglen);
-    struct TopicList *topiclist = topiclisthead;
-    while (topiclist != NULL) {
-        if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
-            break;
-        }
-        topiclist = topiclist->tail;
-    }
-    if (topiclist != NULL) {
-        EPOLL *e = topiclist->epoll;
-        while (e != NULL) {
-            e->write(e, buff, packagelen);
-            e = e->ttail;
-        }
-    }
+    SendToClient(buff, packagelen, topic, topiclen);
 }
 
 void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
     if (sbbl->head) {
         sbbl->head->tail = sbbl->tail;
     } else {
-        epoll->subscribelist = sbbl->tail;
+        epoll->sbbl = sbbl->tail;
     }
     if (sbbl->tail) {
         sbbl->tail->head = sbbl->head;
@@ -116,7 +120,7 @@ void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
 }
 
 int DeleteMqttClient (EPOLL *epoll, unsigned char *buff) {
-    struct SubScribeList *sbbl = epoll->subscribelist;
+    struct SubScribeList *sbbl = epoll->sbbl;
     while (sbbl != NULL) {
         struct SubScribeList *next = sbbl->tail;
         UnSubScribeFunc(epoll, sbbl);
@@ -425,20 +429,7 @@ LOOP:
             unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
             offset += 2;
             unsigned char *topic = buff + offset;
-            struct TopicList *topiclist = topiclisthead;
-            while (topiclist != NULL) {
-                if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
-                    break;
-                }
-                topiclist = topiclist->tail;
-            }
-            if (topiclist != NULL) {
-                EPOLL *e = topiclist->epoll;
-                while (e != NULL) {
-                    e->write(e, buff, packagelen);
-                    e = e->ttail;
-                }
-            }
+            SendToClient(buff, packagelen, topic, topiclen);
         } else if (type == PUBACK || type == PUBREC || type == PUBREL || type == PUBCOMP) {
         } else if (type == SUBSCRIBE) {
             if ((buff[0] & 0x0f) != 0x02) {
@@ -524,7 +515,7 @@ LOOP:
                     }
                     topiclist->epoll = epoll;
                 }
-                struct SubScribeList *sbbl = epoll->subscribelist;
+                struct SubScribeList *sbbl = epoll->sbbl;
                 while (sbbl != NULL) {
                     if (sbbl->topiclist == topiclist) {
                         break;
@@ -540,11 +531,11 @@ LOOP:
                     }
                     sbbl->topiclist = topiclist;
                     sbbl->head = NULL;
-                    sbbl->tail = epoll->subscribelist;
-                    if (epoll->subscribelist) {
-                        epoll->subscribelist->head = sbbl;
+                    sbbl->tail = epoll->sbbl;
+                    if (epoll->sbbl) {
+                        epoll->sbbl->head = sbbl;
                     }
-                    epoll->subscribelist = sbbl;
+                    epoll->sbbl = sbbl;
                 }
                 suback[1]++;
                 suback[ackoffset] = 0x00;
@@ -578,7 +569,7 @@ LOOP:
                     return -42;
                 }
                 unsigned char *topic = buff + offset;
-                struct SubScribeList *sbbl = epoll->subscribelist;
+                struct SubScribeList *sbbl = epoll->sbbl;
                 while (sbbl != NULL) {
                     if (sbbl->topiclist->topiclen == topiclen && !memcmp(sbbl->topiclist->topic, topic, topiclen)) {
                         break;
