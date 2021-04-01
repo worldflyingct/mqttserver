@@ -546,17 +546,16 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     if num < 127 {
         b = make([]byte, num + 2)
         offset = 3
-    } else if num < 16384 {
+    } else if num < 0x4000 {
         b = make([]byte, num + 3)
         offset = 4
-    } else if num < 2097151 {
+    } else if num < 0x200000 {
         b = make([]byte, num + 4)
         offset = 5
     } else {
         b = make([]byte, num + 5)
         offset = 6
     }
-    b[0] = 0x30
     n := 0
     for num > 0 {
         b[n] |= 0x80
@@ -564,6 +563,7 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
         b[n] = byte(num & 0x7f)
         num >>= 7
     }
+    b[0] = 0x30
     b[offset] = byte(topiclen>>8)
     b[offset+1] = byte(topiclen)
     offset += 2

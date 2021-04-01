@@ -1,4 +1,3 @@
-#include <stdio.h>
 
 const unsigned char* base64table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

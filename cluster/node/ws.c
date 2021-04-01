@@ -89,7 +89,6 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             size = epoll->httphead->httpparam_size;
             p = epoll->httphead->p;
             k = epoll->httphead->k;
-            k = epoll->httphead->k;
             headlen = epoll->httphead->headlen;
             free(epoll->httphead);
             epoll->httphead = NULL;
@@ -114,8 +113,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                     p = i;
                 }
                 if (!strcmp(httpparam[i].key, "Content-Length")) {
-                    printf("in %s, at %d\n", __FILE__, __LINE__);
-                    packagelen = atoi(httpparam[i].value);
+                    packagelen = atoi(httpparam[i].value) + headlen;
                     l = i;
                 }
                 if (k != -1 && p != -1 && l != -1) {
@@ -170,7 +168,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
             } else if (!strcmp(path, "/showclients")) { // 是mqtt请求
-                printf("in %s, at %d\n", __FILE__, __LINE__);
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
                 ShowClients();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
                 Epoll_Delete(epoll);
@@ -178,22 +176,8 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
                 Epoll_Delete(epoll);
             }
-        } else if (!strcmp(method, "POST")) { // restful请求发送消息
-            buff = buff + headlen;
-            packagelen = packagelen - headlen;
-            unsigned long mqttpackagelen;
-            unsigned long offset;
-            if (GetMqttLength(buff, packagelen, &mqttpackagelen, &offset)) {
-                Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-            } else {
-                if (packagelen != mqttpackagelen + offset) {
-                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                } else if (PublishData(buff + headlen, packagelen - headlen, offset)) {
-                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                } else {
-                    Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
-                }
-            }
+        } else if (!strcmp(method, "POST")) { // restful请求发送消息，过几天再完成它。
+            Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
             Epoll_Delete(epoll);
         } else {
             Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));

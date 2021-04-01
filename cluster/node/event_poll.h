@@ -54,6 +54,10 @@ struct EPOLL {
     unsigned long mqttuselen; // 已经消耗的缓存
     unsigned char *clientid;
     unsigned short clientidlen;
+    unsigned char *mqttwilltopic;
+    unsigned short mqttwilltopiclen;
+    unsigned char *mqttwillmsg;
+    unsigned short mqttwillmsglen;
     struct SubScribeList *subscribelist;
     unsigned short keepalive;
     unsigned char wsstate; // 0为未注，1为注册
