@@ -10,32 +10,35 @@
     <script type="text/javascript" src="index.js"></script>
   </head>
   <body>
-    <div>解决方案来自http://www.eclipse.org/paho/clients/js/</div>
+    <div>解决方案来自https://github.com/bluerhinos/phpMQTT与http://www.eclipse.org/paho/clients/js/</div>
+    <div>自动重连接版本:<a href="reconnect.html">传送门</a></div>
+    <div>基于mqtt的聊天室:<a href="chatroom.html">传送门</a></div>
+    <div>php发送mqtt的代码:<a href="phpMQTT.zip" download="phpMQTT.zip">下载</a></div>
     <div class="cap">
       <h2>Mqtt web客户端</h2>
       <div>
         <label for="server">服务器地址:</label>
-        <input type="text" id="server" value="47.91.225.92"/>
+        <input type="text" id="server" value="mqtt.worldflying.cn"/>
       </div>
       <div>
         <label for="port">默认端口:</label>
-        <input type="number" id="port" value="80"/>
+        <input type="number" id="port" value="443"/>
       </div>
       <div>
         <label for="username">服务器用户名:</label>
-        <input type="text" id="username" value="5QdISjSg40jHFyzR"/>
+        <input type="text" id="username" value="admin"/>
       </div>
       <div>
         <label for="password">服务器密码:</label>
-        <input type="text" id="password" value="QLUL276kqXn55lBK"/>
+        <input type="text" id="password" value="worldflying2016"/>
       </div>
       <div>
         <label for="topic">监听topic:</label>
-        <input type="text" id="topic" value="testtopic"/>
+        <input type="text" id="topic" value="topic"/>
       </div>
       <div>
         <label for="useSSL">useSSL:</label>
-        <input type="checkbox" id="useSSL"/>
+        <input type="checkbox" id="useSSL" checked/>
       </div>
 <!--
       <div>
@@ -55,6 +58,7 @@
         <button onclick="connect_server();">连接</button>
         <button onclick="disconnect_server();">断开</button>
         <button onclick="mqtt_send();">发送</button>
+        <button onclick="clear_msg();">清空消息</button>
       </div>
     </div>
     <div class="cap">

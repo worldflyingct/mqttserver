@@ -26,6 +26,7 @@ type MqttClient struct {
     topics []*string
     willtopic *string
     willmessage []byte
+    keepalive uint16
 }
 
 func (c MqttClient) Write (b []byte) (int, error) {
@@ -46,8 +47,11 @@ func (c MqttClient) Read (b []byte) (int, error) {
     if c.connType == 0 { // tcp数据
         num, err = c.tcp.Read(b)
     } else if c.connType == 1 { // ws数据
+/*
         mt, message, e := c.ws.ReadMessage()
         log.Println("messageType:", mt)
+*/
+        _, message, e := c.ws.ReadMessage()
         num = copy(b, message)
         err = e
     }
@@ -93,14 +97,14 @@ func GetMqttDataLength (data []byte, num uint32) (uint32, uint32)  {
                 if num < 5 {
                     return 0, 0
                 }
-                datalen = 128 * 128 * 128 * uint32(data[4]) + 128 * 128 * uint32(data[3] & 0x7f) + 128 * uint32(data[2] & 0x7f) + uint32(data[1] & 0x7f) + 5
+                datalen = (uint32(data[4]) << 21) | (uint32(data[3] & 0x7f) << 14) | (uint32(data[2] & 0x7f) << 7) | uint32(data[1] & 0x7f) + 5
                 offset = 5
             } else {
-                datalen = 128 * 128 * uint32(data[3]) + 128 * uint32(data[2] & 0x7f) + uint32(data[1] & 0x7f) + 4
+                datalen = (uint32(data[3]) << 14) | (uint32(data[2] & 0x7f) << 14) | uint32(data[1] & 0x7f) + 4
                 offset = 4
             }
         } else {
-            datalen = 128 * uint32(data[2]) + uint32(data[1] & 0x7f) + 3
+            datalen = (uint32(data[2]) << 7) | uint32(data[1] & 0x7f) + 3
             offset = 3
         }
     } else {
@@ -139,8 +143,6 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
             if *mqttclient.willtopic != "" {
                 PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
             }
-            time.Sleep(3 * time.Second)
-            mqttclient.Close();
             return
         }
     }
@@ -149,12 +151,9 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
 func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
     defer mqttclient.Close()
 
-    var pack []byte
-    var packlen uint32
-    var uselen uint32
-    pack = nil
-    packlen = 0
-    uselen = 0
+    pack := []byte(nil)
+    packlen := uint32(0)
+    uselen := uint32(0)
     state := false
 
     for {
@@ -190,16 +189,25 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                 break
             }
             if state {
-                switch data[0] & 0xf0 {                
+                switch data[0] & 0xf0 {
                     case 0x30: // publish
                         log.Println("publish")
                         if (data[0] & 0x0f) != 0x00 { // 本程序不处理dup，qos与retain不为0的报文
                             log.Println("publish dup,qos or retain is not 0.")
                             return
                         }
+                        if num < offset + 2 {
+                            log.Println("mqtt data so short.")
+                            return
+                        }
                         topiclen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                        topic := string(data[offset+2 : offset+2+topiclen])
-                        offset += 2+topiclen
+                        offset += 2
+                        if num < offset + topiclen {
+                            log.Println("mqtt data so short.")
+                            return
+                        }
+                        topic := string(data[offset : offset+topiclen])
+                        offset += topiclen
                         // qos为0时，无报文标识符，剩下的全部都是内容
                         if (data[0] & 0x06) != 0x00 { // qos不为0时，存在报文标识符。
                             offset += 2
@@ -208,6 +216,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                         for i := 0 ; i < tslen ; i++ {
                             if ms.topics[i] == topic {
                                 ms.cb(topic, data[offset:datalen])
+                                break
                             }
                         }
                         clientlen := len(ms.mqttclients)
@@ -231,155 +240,249 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                         log.Println("subscribe")
                         if (data[0] & 0x0f) != 0x02 {
                             log.Println("mqtt connect package flag error")
-                            mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                            return
+                        }
+                        if num < offset + 2 {
+                            log.Println("mqtt data so short.")
                             return
                         }
                         subackdata := []byte{0x90, 0x02, data[offset], data[offset+1]} // 报文标识符
                         offset += 2
                         for offset < datalen {
+                            if num < offset + 2 {
+                                log.Println("mqtt data so short.")
+                                return
+                            }
                             topiclen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                            topic := string(data[offset+2 : offset+2+topiclen])
-                            offset += 2+topiclen
-                            log.Println("topic", topic)
+                            offset += 2
+                            if num < offset + topiclen {
+                                log.Println("mqtt data so short.")
+                                return
+                            }
+                            topic := string(data[offset : offset+topiclen])
+                            offset += topiclen
+                            // log.Println("topic", topic)
                             if HasSliceValue(mqttclient.topics, topic) == false {
                                 mqttclient.topics = append(mqttclient.topics, &topic)
                             }
+                            if num < offset + 1 {
+                                log.Println("mqtt data so short.")
+                                return
+                            }
                             if data[offset] != 0 {
                                 log.Println("only support Requested QoS is 0.")
-                                mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                                 return
                             }
                             offset += 1 // 跳过迁移服务质量等级
                             subackdata[1]++
                             subackdata = append(subackdata, 0x00)
                         }
-                        mqttclient.Write(subackdata)
+                        _, err = mqttclient.Write(subackdata)
+                        if err != nil {
+                            log.Println(err)
+                            return
+                        }
                     case 0xa0: // unsubscribe
                         log.Println("unsubscribe")
                         if (data[0] & 0x0f) != 0x02 {
                             log.Println("mqtt connect package flag error")
-                            mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                            return
+                        }
+                        if num < offset + 2 {
+                            log.Println("mqtt data so short.")
                             return
                         }
                         unsubackdata := []byte{0xb0, 0x02, data[offset], data[offset+1]} // 报文标识符
                         offset += 2
                         for offset < datalen {
+                            if num < offset + 2 {
+                                log.Println("mqtt data so short.")
+                                return
+                            }
                             topiclen := 256 * uint32(data[offset]) + uint32(data[offset+1])
+                            offset += 2
+                            if num < offset + topiclen {
+                                log.Println("mqtt data so short.")
+                                return
+                            }
                             topic := string(data[offset+2 : offset+2+topiclen])
-                            offset += 2+topiclen
+                            offset += topiclen
                             mqttclient.topics = RemoveSliceByValue(mqttclient.topics, topic)
                         }
-                        mqttclient.Write(unsubackdata)
+                        _, err = mqttclient.Write(unsubackdata)
+                        if err != nil {
+                            log.Println(err)
+                            return
+                        }
                     case 0xc0: // pingreq
                         log.Println("pingreq")
                         if (data[0] & 0x0f) != 0x00 || data[1] != 0x00 || datalen != 2 {
                             log.Println("mqtt connect package flag error")
-                            mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                             return
                         }
-                        mqttclient.Write([]byte{0xd0, 0x00})
+                        _, err = mqttclient.Write([]byte{0xd0, 0x00})
+                        if err != nil {
+                            log.Println(err)
+                            return
+                        }
                     case 0xe0: // disconnect
                         log.Println("disconnect")
-                        if (data[0] & 0x0f) != 0x00 || data[1] != 0x00 || datalen != 2 {
-                            log.Println("mqtt connect package flag error")
-                            mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
-                            return
-                        }
+                        return
                     default:
                         log.Println("unknown mqtt package type", data[0] & 0xf0)
                         return
                 }
-            } else {            
+            } else {
                 if (data[0] & 0xf0) != 0x10 { // connect
                     log.Println("client need connect first")
+                    _, err = mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x05})
+                    if err != nil {
+                        log.Println(err)
+                        return
+                    }
                     return
                 }
                 log.Println("connect")
                 if (data[0] & 0x0f) != 0x00 {
                     log.Println("mqtt connect package flag error")
-                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x03})
+                    return
+                }
+                if num < offset + 2 {
+                    log.Println("mqtt data so short.")
                     return
                 }
                 protnamelen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                log.Println("protocol name:", string(data[offset+2:offset+2+protnamelen]))
-                offset += 2+protnamelen
+                offset += 2
+                if num < offset + protnamelen {
+                    log.Println("mqtt data so short.")
+                    return
+                }
+                log.Println("protocol name:", string(data[offset:offset+protnamelen]))
+                offset += protnamelen
+                if num < offset + 1 {
+                    log.Println("mqtt data so short.")
+                    return
+                }
                 if data[offset] != 0x03 && data[offset] != 0x04 && data[offset] != 0x05 { // 0x03为mqtt3.1, 0x04为mqtt3.1.1, 0x05为mqtt5
                     log.Println("no support mqtt version", data[offset])
                     mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
                     return
                 }
                 offset += 1
-                if (data[offset] & 0x80) != 0x80  { // 判断是否支持用户名，如果不支持，服务器直接断开连接
-                    log.Println("need a username")
-                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
+                if num < offset + 1 {
+                    log.Println("mqtt data so short.")
                     return
                 }
-                if (data[offset] & 0x40) != 0x40  { // 判断是否支持密码，如果不支持，服务器直接断开连接
-                    log.Println("need a password")
+                if (data[offset] & 0xc3) != 0xc2  { // 必须支持需要用户名，密码，清空session的模式。
+                    log.Println("need a username")
                     mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
                     return
                 }
                 if (data[offset] & 0x04) != 0x00 && (data[offset] & 0x38) != 0x00 { // 目前该服务器仅支持will的qos为0，非保留标识
                     log.Println("just support have a will and qos is 0, no retain")
-                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
-                    return
-                }
-                if (data[offset] & 0x02) != 0x02 { // Clean Session位必须位1
-                    log.Println("clean session must 1")
-                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
-                    return
-                }
-                if (data[offset] & 0x01) == 0x01 { // 保留位错误
-                    log.Println("Reserved Bit error")
-                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+                    mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x03})
                     return
                 }
                 needwill := data[offset] & 0x04
                 offset += 1
+                if num < offset + 2 {
+                    log.Println("mqtt data so short.")
+                    return
+                }
+                keepalive := 256 * uint16(data[offset]) + uint16(data[offset+1])
                 offset += 2 // 舍弃keepalive数据的读取
+                if num < offset + 2 {
+                    log.Println("mqtt data so short.")
+                    return
+                }
                 clientidlen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                clientid := string(data[offset+2 : offset+2+clientidlen])
+                offset += 2
+                if num < offset + clientidlen {
+                    log.Println("mqtt data so short.")
+                    return
+                }
+                clientid := string(data[offset : offset+clientidlen])
                 log.Println("clientid:", clientid)
-                offset += 2+clientidlen
+                offset += clientidlen
                 clientlen := len(ms.mqttclients)
                 for i := 0 ; i < clientlen ; i++ {
                     if *ms.mqttclients[i].clientid == clientid {
-                        log.Println("clientid has exist")
-                        mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x02})
-                        return
+                        ms.mqttclients[i].Close()
                     }
                 }
                 var willtopic string
                 var willmessage []byte
                 if needwill != 0 { // 需要遗嘱
+                    if num < offset + 2 {
+                        log.Println("mqtt data so short.")
+                        return
+                    }
                     willtopiclen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                    willtopic = string(data[offset+2 : offset+2+willtopiclen])
-                    offset += 2+willtopiclen
+                    offset += 2
+                    if num < offset + willtopiclen {
+                        log.Println("mqtt data so short.")
+                        return
+                    }
+                    willtopic = string(data[offset : offset + willtopiclen])
+                    offset += willtopiclen
+                    if num < offset + 2 {
+                        log.Println("mqtt data so short.")
+                        return
+                    }
                     willmessagelen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                    willmessage = data[offset+2 : offset+2+willtopiclen]
-                    offset += 2+willmessagelen
+                    offset += 2
+                    if num < offset + willmessagelen {
+                        log.Println("mqtt data so short.")
+                        return
+                    }
+                    willmessage = data[offset : offset + willmessagelen]
+                    offset += willmessagelen
                 } else {
                     willtopic = ""
                     willmessage = make([]byte, 0)
                 }
+                if num < offset + 2 {
+                    log.Println("mqtt data so short.")
+                    return
+                }
                 userlen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                user := string(data[offset+2 : offset+2+userlen])
+                offset += 2
+                if num < offset + userlen {
+                    log.Println("mqtt data so short.")
+                    return
+                }
+                user := string(data[offset : offset+userlen])
                 log.Println("username", user)
-                offset += 2+userlen
+                offset += userlen
+                if offset < 2 {
+                    log.Println("mqtt data so short.")
+                    return
+                }
                 passlen := 256 * uint32(data[offset]) + uint32(data[offset+1])
-                pass := string(data[offset+2 : offset+2+passlen])
+                offset += 2
+                if num < offset + passlen {
+                    log.Println("mqtt data so short.")
+                    return
+                }
+                pass := string(data[offset : offset+passlen])
                 log.Println("password", pass)
-                offset += 2+passlen
+                offset += passlen
                 if user != *ms.username || pass != *ms.password {
                     log.Println("username or password error", user, pass)
                     mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
                     return
                 }
-                mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
+                _, err = mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
+                if err != nil {
+                    log.Println(err)
+                    return
+                }
                 mqttclient.clientid = &clientid
                 mqttclient.topics = make([]*string, 0)
                 mqttclient.willtopic = &willtopic
                 mqttclient.willmessage = willmessage
+                mqttclient.keepalive = keepalive
                 ms.mqttclients = append(ms.mqttclients, mqttclient)
                 defer RemoveClientFromMqttClients(ms, mqttclient)
                 state = true
@@ -567,13 +670,9 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     b[offset] = byte(topiclen>>8)
     b[offset+1] = byte(topiclen)
     offset += 2
-    for i := uint32(0) ; i < topiclen ; i++ {
-        b[offset+i] = topic[i]
-    }
+    copy(b[offset:], []byte(topic))
     offset += topiclen
-    for i := uint32(0) ; i < msglen ; i++ {
-        b[offset+i] = msg[i]
-    }
+    copy(b[offset:], []byte(msg))
     clientlen := len(ms.mqttclients)
     for i := 0 ; i < clientlen ; i++ {
         topiclen := uint32(len(ms.mqttclients[i].topics))

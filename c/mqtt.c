@@ -241,7 +241,7 @@ LOOP:
             Epoll_Delete(epoll);
             return -9;
         }
-        if ((buff[offset] & 0xc2) != 0xc2) { // 必须支持需要用户名，密码，清空session的模式。
+        if ((buff[offset] & 0xc3) != 0xc2) { // 必须支持需要用户名，密码，清空session的模式。
             printf("no support mode:0x%02x, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
             epoll->write(epoll, connsererr, sizeof(connsererr));
             Epoll_Delete(epoll);
