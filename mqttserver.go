@@ -25,7 +25,7 @@ type MqttClient struct {
     ws *websocket.Conn
     clientid *string
     topics []*string
-    mutex sync.Mutex
+    mutex sync.RWMutex
     willtopic *string
     willmessage []byte
     keepalive uint16
@@ -74,7 +74,7 @@ type Callback func (topic string, data []byte)
 
 type MqttServer struct {
     mqttclients []*MqttClient
-    mutex sync.Mutex
+    mutex sync.RWMutex
     topics []string
     tcpListen *net.TCPListener
     cb Callback
@@ -236,19 +236,19 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                                 break
                             }
                         }
-                        ms.mutex.Lock()
+                        ms.mutex.RLock()
                         clientlen := len(ms.mqttclients)
                         for i := 0 ; i < clientlen ; i++ {
-                            ms.mqttclients[i].mutex.Lock()
+                            ms.mqttclients[i].mutex.RLock()
                             topiclen = uint32(len(ms.mqttclients[i].topics))
                             for j := uint32(0) ; j < topiclen ; j++ {
                                 if *ms.mqttclients[i].topics[j] == topic {
                                     ms.mqttclients[i].Write(data[:datalen])
                                 }
                             }
-                            ms.mqttclients[i].mutex.Unlock()
+                            ms.mqttclients[i].mutex.RUnlock()
                         }
-                        ms.mutex.Unlock()
+                        ms.mutex.RUnlock()
                     case 0x40:
                         log.Println("puback")
                     case 0x50:
@@ -652,12 +652,12 @@ func ListenFastHttpWebSocket (ms *MqttServer, ctx *fasthttp.RequestCtx, params *
 }
 
 func CloseServer (ms *MqttServer) {
-    ms.mutex.Lock()
+    ms.mutex.RLock()
     mqttclientslen := len(ms.mqttclients)
     for i := 0 ; i < mqttclientslen ; i++ {
         ms.mqttclients[i].Close();
     }
-    ms.mutex.Unlock()
+    ms.mutex.RUnlock()
     if ms.tcpListen != nil {
         ms.tcpListen.Close()
     }
@@ -702,17 +702,17 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     copy(b[offset:], []byte(topic))
     offset += topiclen
     copy(b[offset:], []byte(msg))
-    ms.mutex.Lock()
+    ms.mutex.RLock()
     clientlen := len(ms.mqttclients)
     for i := 0 ; i < clientlen ; i++ {
-        ms.mqttclients[i].mutex.Lock()
+        ms.mqttclients[i].mutex.RLock()
         topiclen := uint32(len(ms.mqttclients[i].topics))
         for j := uint32(0) ; j < topiclen ; j++ {
             if *ms.mqttclients[i].topics[j] == topic {
                 ms.mqttclients[i].Write(b)
             }
         }
-        ms.mqttclients[i].mutex.Unlock()
+        ms.mqttclients[i].mutex.RUnlock()
     }
-    ms.mutex.Unlock()
+    ms.mutex.RUnlock()
 }
