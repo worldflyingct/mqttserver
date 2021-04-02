@@ -1,4 +1,4 @@
-module mqttserver
+module github.com/worldflyingct/mqttserver
 
 go 1.16
 
