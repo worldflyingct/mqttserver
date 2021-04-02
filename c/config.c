@@ -79,9 +79,9 @@ struct ConfigData* InitConfig () {
     }
     obj = cJSON_GetObjectItem(json, "tlsport");
     if (obj) {
-        configdata.tcpport = obj->valueint;
+        configdata.tlsport = obj->valueint;
     } else {
-        configdata.tcpport = 0;
+        configdata.tlsport = 0;
     }
     obj = cJSON_GetObjectItem(json, "wsport");
     if (obj) {

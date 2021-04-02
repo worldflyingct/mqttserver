@@ -1,21 +1,6 @@
 #ifndef __EVENT_POLL_H___
 #define __EVENT_POLL_H___
 
-#define CONNECT         0x10
-#define CONNACK         0x20
-#define PUBLISH         0x30
-#define PUBACK          0x40
-#define PUBREC          0x50
-#define PUBREL          0x60
-#define PUBCOMP         0x70
-#define SUBSCRIBE       0x80
-#define SUBACK          0x90
-#define UNSUBSCRIBE     0xa0
-#define UNSUBACK        0xb0
-#define PINGREQ         0xc0
-#define PINGRESP        0xd0
-#define DISCONNECT      0xe0
-
 #include <sys/epoll.h>
 #include <openssl/ssl.h>
 #include "ws.h"

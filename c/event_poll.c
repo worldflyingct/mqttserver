@@ -108,12 +108,13 @@ static void Epoll_Event (int event, EPOLL *epoll) {
             // printf("in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
         } else if (epoll->tls && !epoll->tlsok) {
-            int r_code = SSL_accept(epoll->tls);
+            int r_code = SSL_do_handshake(epoll->tls);
             if(r_code == 1) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
                 epoll->tlsok = 1;
                 if (epoll->writeenable) {
-                    mod_fd_at_poll(epoll, 1);
                     epoll->writeenable = 0;
+                    mod_fd_at_poll(epoll, 1);
                 }
             } else {
                 int errcode = SSL_get_error(epoll->tls, r_code);
@@ -124,38 +125,47 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                     mod_fd_at_poll(epoll, 1);
                     epoll->writeenable = 0;
                 } else {
+                    printf("errcode: %d, in %s, at %d\n", errcode, __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                 }
             }
         } else if (event & EPOLLOUT) {
-            // printf("in %s, at %d\n", __FILE__, __LINE__);
-            epoll->writeenable = 1;
-            if (epoll->bufflen > 0) {
-                ssize_t res;
-                if (epoll->tls) {
-                    res = SSL_write(epoll->tls, epoll->buff, epoll->bufflen);
-                } else {
-                    res = write(epoll->fd, epoll->buff, epoll->bufflen);
-                }
-                if (res == epoll->bufflen) {
-                    free(epoll->buff);
-                    epoll->buff = NULL;
-                    epoll->bufflen = 0;
-                    mod_fd_at_poll(epoll, 0);
-                } else if ( 0 <= res && res < epoll->bufflen) {
-                    unsigned long bufflen = epoll->bufflen - res;
-                    unsigned char *buff = (unsigned char*)malloc(bufflen);
-                    memcpy(buff, epoll->buff + res, bufflen);
-                    free(epoll->buff);
-                    epoll->buff = buff;
-                    epoll->bufflen = bufflen;
-                    epoll->writeenable = 0;
-                }
-            } else {
+            if (epoll->bufflen == 0) {
+                epoll->writeenable = 1;
                 mod_fd_at_poll(epoll, 0);
+                return;
             }
+            ssize_t res;
+            if (epoll->tls) {
+                res = SSL_write(epoll->tls, epoll->buff, epoll->bufflen);
+            } else {
+                res = write(epoll->fd, epoll->buff, epoll->bufflen);
+            }
+            if (res == epoll->bufflen) {
+                free(epoll->buff);
+                epoll->buff = NULL;
+                epoll->bufflen = 0;
+                epoll->writeenable = 1;
+                mod_fd_at_poll(epoll, 0);
+                return;
+            }
+            if (res < 0) {
+                if (epoll->tls) {
+                    int errcode = SSL_get_error(epoll->tls, res);
+                    if (errcode == SSL_ERROR_WANT_READ) {
+                        epoll->tlsok = 0;
+                        mod_fd_at_poll(epoll, 0);
+                    }
+                }
+                res = 0;
+            }
+            unsigned long bufflen = epoll->bufflen - res;
+            unsigned char *buff = (unsigned char*)malloc(bufflen);
+            memcpy(buff, epoll->buff + res, bufflen);
+            free(epoll->buff);
+            epoll->buff = buff;
+            epoll->bufflen = bufflen;
         } else {
-            // printf("in %s, at %d\n", __FILE__, __LINE__);
             epoll->read(epoll, buffer);
         }
     }
@@ -172,19 +182,24 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
         if (res == len) {
             return;
         }
-        unsigned long bufflen;
-        if (res <= 0) {
-            bufflen = len;
+        if (res < 0) {
+            if (epoll->tls) {
+                int errcode = SSL_get_error(epoll->tls, res);
+                if (errcode == SSL_ERROR_WANT_READ) {
+                    epoll->tlsok = 0;
+                }
+            }
             res = 0;
-        } else if (res < len) {
-            bufflen = len - res;
         }
+        unsigned long bufflen = len - res;
         unsigned char *buff = (unsigned char*)malloc(epoll->bufflen);
         memcpy(buff, data + res, epoll->bufflen);
-        mod_fd_at_poll(epoll, 1);
         epoll->buff = buff;
         epoll->bufflen = bufflen;
         epoll->writeenable = 0;
+        if (epoll->tlsok) {
+            mod_fd_at_poll(epoll, 1);
+        }
     } else {
         unsigned long bufflen = epoll->bufflen + len;
         unsigned char *buff = (unsigned char*)malloc(bufflen);

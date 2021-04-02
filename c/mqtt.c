@@ -7,12 +7,27 @@
 #include "config.h"
 #include "sha256.h"
 
+#define CONNECT         0x10
+#define CONNACK         0x20
+#define PUBLISH         0x30
+#define PUBACK          0x40
+#define PUBREC          0x50
+#define PUBREL          0x60
+#define PUBCOMP         0x70
+#define SUBSCRIBE       0x80
+#define SUBACK          0x90
+#define UNSUBSCRIBE     0xa0
+#define UNSUBACK        0xb0
+#define PINGREQ         0xc0
+#define PINGRESP        0xd0
+#define DISCONNECT      0xe0
+
 static const unsigned char connsuccess[]   = {CONNACK, 0x02, 0x00, 0x00};
 static const unsigned char connvererr[]    = {CONNACK, 0x02, 0x00, 0x01};
 static const unsigned char connsererr[]    = {CONNACK, 0x02, 0x00, 0x03};
 static const unsigned char connloginfail[] = {CONNACK, 0x02, 0x00, 0x04};
 static const unsigned char connnologin[]   = {CONNACK, 0x02, 0x00, 0x05};
-static const unsigned char pingresp[]   = {PINGRESP, 0x00};
+static const unsigned char pingresp[]      = {PINGRESP, 0x00};
 
 struct TopicList {
     unsigned char *topic;
@@ -30,8 +45,37 @@ void ShowClients () {
         unsigned char clientid[epoll->clientidlen+1];
         memcpy(clientid, epoll->clientid, epoll->clientidlen);
         clientid[epoll->clientidlen] = '\0';
-        printf("clientid:%s, %d\n", clientid, epoll->clientid);
+        printf("clientid:%s topic:", clientid);
+        struct SubScribeList *sbbl = epoll->sbbl;
+        while (sbbl != NULL) {
+            unsigned char topic[sbbl->topiclist->topiclen+1];
+            memcpy(topic, sbbl->topiclist->topic, sbbl->topiclist->topiclen);
+            topic[sbbl->topiclist->topiclen] = '\0';
+            printf("%s ", topic);
+            sbbl = sbbl->tail;
+        }
+        printf("\n");
         epoll = epoll->tail;
+    }
+}
+
+void ShowTopics () {
+    struct TopicList *topiclist = topiclisthead;
+    while (topiclist != NULL) {
+        unsigned char topic[topiclist->topiclen+1];
+        memcpy(topic, topiclist->topic, topiclist->topiclen);
+        topic[topiclist->topiclen] = '\0';
+        printf("topic:%s clientid:", topic);
+        EPOLL *epoll = topiclist->epoll;
+        while (epoll != NULL) {
+            unsigned char clientid[epoll->clientidlen+1];
+            memcpy(clientid, epoll->clientid, epoll->clientidlen);
+            clientid[epoll->clientidlen] = '\0';
+            printf("%s ", clientid);
+            epoll = epoll->ttail;
+        }
+        printf("\n");
+        topiclist = topiclist->tail;
     }
 }
 
@@ -555,7 +599,7 @@ LOOP:
             }
             unsigned char unsuback[1024] = {UNSUBACK, 0x02, buff[offset], buff[offset+1]};
             offset += 2;
-            while (packagelen < offset) {
+            while (offset < packagelen) {
                 if (packagelen < offset + 2) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);

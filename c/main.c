@@ -18,7 +18,7 @@ int main () {
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
-        SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+        SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
         if (!SSL_CTX_use_certificate_file(ctx, configdata->crtpath, SSL_FILETYPE_PEM)) {
             printf("in %s, at %d\n", __FILE__, __LINE__);
             return -3;
@@ -31,6 +31,7 @@ int main () {
             printf("in %s, at %d\n", __FILE__, __LINE__);
             return -5;
         }
+        configdata->ctx = ctx;
     }
     if (Tcp_Create()) {
         printf("in %s, at %d\n", __FILE__, __LINE__);

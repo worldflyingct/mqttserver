@@ -67,6 +67,13 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
         len = read(epoll->fd, buff, 512*1024);
     }
     if (len < 0) {
+        if (epoll->tls) {
+            int errcode = SSL_get_error(epoll->tls, len);
+            if (errcode == SSL_ERROR_WANT_WRITE) {
+                epoll->tlsok = 0;
+                mod_fd_at_poll(epoll, 1);
+            }
+        }
         return;
     } else if (!epoll->wsstate) {
         char *method, *path, *version;
@@ -175,6 +182,11 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             } else if (!strcmp(path, "/showclients")) { // 是mqtt请求
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 ShowClients();
+                Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
+                Epoll_Delete(epoll);
+            } else if (!strcmp(path, "/showtopics")) { // 是mqtt请求
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                ShowTopics();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
                 Epoll_Delete(epoll);
             } else {
@@ -341,7 +353,7 @@ static void Ws_New_Connect (EPOLL *e, unsigned char *buff) {
 int Ws_Create () {
     struct ConfigData *configdata = GetConfig ();
     if (configdata->wsport) {
-        int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP );
+        int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (fd < 0) {
             printf("create socket fail, in %s, at %d\n", __FILE__, __LINE__);
             return -1;
@@ -372,10 +384,10 @@ int Ws_Create () {
         epoll->read = Ws_New_Connect;
     }
     if (configdata->wssport) {
-        int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP );
+        int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (fd < 0) {
             printf("create socket fail, in %s, at %d\n", __FILE__, __LINE__);
-            return -1;
+            return -5;
         }
         int on = 1;
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
@@ -387,21 +399,22 @@ int Ws_Create () {
         if (bind(fd, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
             printf("port %d bind fail, in %s, at %d\n", configdata->wssport, __FILE__, __LINE__);
             close(fd);
-            return -2;
+            return -6;
         }
         if (listen(fd, 16) < 0) {
             printf("listen port %d fail, in %s, at %d\n", configdata->wssport, __FILE__, __LINE__);
             close(fd);
-            return -3;
+            return -7;
         }
         EPOLL *epoll = add_fd_to_poll(fd);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);
-            return -4;
+            return -8;
         }
         epoll->read = Ws_New_Connect;
         epoll->tls = (SSL*)1;
+        epoll->tlsok = 1;
     }
     return 0;
 }
