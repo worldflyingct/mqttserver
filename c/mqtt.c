@@ -100,7 +100,7 @@ void PublishData (unsigned char *topic, unsigned long topiclen, unsigned char *m
     unsigned long len = 2 + topiclen + msglen;
     unsigned long packagelen;
     unsigned long offset;
-    if (len < 127) {
+    if (len < 0x80) {
         packagelen = len + 2;
         offset = 3;
     } else if (len < 0x4000) {

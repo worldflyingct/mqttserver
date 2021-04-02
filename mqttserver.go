@@ -134,9 +134,10 @@ func RemoveSliceByValue (arrs []*string, d string) []*string {
             if i == 0 {
                 return arrs[1:]
             } else if i + 1 == arrslen {
-                return arrs[:arrslen-2]
+                return arrs[:arrslen-1]
             } else {
-                return append(arrs[:i], arrs[i+1:]...)
+                copy(arrs[i:], arrs[i+1:])
+                return arrs[:arrslen-1]
             }
         }
     }
@@ -153,9 +154,10 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
             if i == 0 {
                 ms.mqttclients = ms.mqttclients[1:]
             } else if i + 1 == mqttclientslen {
-                ms.mqttclients = ms.mqttclients[:mqttclientslen-2]
+                ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
             } else {
-                ms.mqttclients = append(ms.mqttclients[:i], ms.mqttclients[i+1:]...)
+                copy(ms.mqttclients[i:], ms.mqttclients[i+1:])
+                ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
             }
             if *mqttclient.willtopic != "" {
                 PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
@@ -675,7 +677,7 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     topiclen := uint32(len(topic))
     msglen := uint32(len(msg))
     num := 2 + topiclen + msglen
-    if num < 127 {
+    if num < 0x80 {
         b = make([]byte, num + 2)
         offset = 3
     } else if num < 0x4000 {
