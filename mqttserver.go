@@ -14,6 +14,7 @@ import (
     "strconv"
     "time"
     "net/http"
+    "sync"
     "github.com/valyala/fasthttp"
     "github.com/fasthttp/websocket"
 )
@@ -24,6 +25,7 @@ type MqttClient struct {
     ws *websocket.Conn
     clientid *string
     topics []*string
+    mutex sync.Mutex
     willtopic *string
     willmessage []byte
     keepalive uint16
@@ -72,6 +74,7 @@ type Callback func (topic string, data []byte)
 
 type MqttServer struct {
     mqttclients []*MqttClient
+    mutex sync.Mutex
     topics []string
     tcpListen *net.TCPListener
     cb Callback
@@ -128,18 +131,32 @@ func RemoveSliceByValue (arrs []*string, d string) []*string {
     arrslen := len(arrs)
     for i := 0 ; i < arrslen ; i++ {
         if *arrs[i] == d {
-            return append(arrs[:i], arrs[i+1:]...)
+            if i == 0 {
+                return arrs[1:]
+            } else if i + 1 == arrslen {
+                return arrs[:arrslen-2]
+            } else {
+                return append(arrs[:i], arrs[i+1:]...)
+            }
         }
     }
     return arrs
 }
 
 func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
+    ms.mutex.Lock()
+    defer ms.mutex.Unlock()
     mqttclientslen := len(ms.mqttclients)
     for i := 0 ; i < mqttclientslen ; i++ {
         if ms.mqttclients[i] == mqttclient {
             log.Println("connect lose, clientid:", *mqttclient.clientid)
-            ms.mqttclients = append(ms.mqttclients[:i], ms.mqttclients[i+1:]...)
+            if i == 0 {
+                ms.mqttclients = ms.mqttclients[1:]
+            } else if i + 1 == mqttclientslen {
+                ms.mqttclients = ms.mqttclients[:mqttclientslen-2]
+            } else {
+                ms.mqttclients = append(ms.mqttclients[:i], ms.mqttclients[i+1:]...)
+            }
             if *mqttclient.willtopic != "" {
                 PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
             }
@@ -219,15 +236,19 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                                 break
                             }
                         }
+                        ms.mutex.Lock()
                         clientlen := len(ms.mqttclients)
                         for i := 0 ; i < clientlen ; i++ {
+                            ms.mqttclients[i].mutex.Lock()
                             topiclen = uint32(len(ms.mqttclients[i].topics))
                             for j := uint32(0) ; j < topiclen ; j++ {
                                 if *ms.mqttclients[i].topics[j] == topic {
                                     ms.mqttclients[i].Write(data[:datalen])
                                 }
                             }
+                            ms.mqttclients[i].mutex.Unlock()
                         }
+                        ms.mutex.Unlock()
                     case 0x40:
                         log.Println("puback")
                     case 0x50:
@@ -262,9 +283,11 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                             topic := string(data[offset : offset+topiclen])
                             offset += topiclen
                             // log.Println("topic", topic)
+                            mqttclient.mutex.Lock()
                             if HasSliceValue(mqttclient.topics, topic) == false {
                                 mqttclient.topics = append(mqttclient.topics, &topic)
                             }
+                            mqttclient.mutex.Unlock()
                             if num < offset + 1 {
                                 log.Println("mqtt data so short.")
                                 return
@@ -307,7 +330,9 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                             }
                             topic := string(data[offset+2 : offset+2+topiclen])
                             offset += topiclen
+                            mqttclient.mutex.Lock()
                             mqttclient.topics = RemoveSliceByValue(mqttclient.topics, topic)
+                            mqttclient.mutex.Unlock()
                         }
                         _, err = mqttclient.Write(unsubackdata)
                         if err != nil {
@@ -483,7 +508,9 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                 mqttclient.willtopic = &willtopic
                 mqttclient.willmessage = willmessage
                 mqttclient.keepalive = keepalive
+                ms.mutex.Lock()
                 ms.mqttclients = append(ms.mqttclients, mqttclient)
+                ms.mutex.Unlock()
                 defer RemoveClientFromMqttClients(ms, mqttclient)
                 state = true
             }
@@ -625,10 +652,12 @@ func ListenFastHttpWebSocket (ms *MqttServer, ctx *fasthttp.RequestCtx, params *
 }
 
 func CloseServer (ms *MqttServer) {
+    ms.mutex.Lock()
     mqttclientslen := len(ms.mqttclients)
     for i := 0 ; i < mqttclientslen ; i++ {
         ms.mqttclients[i].Close();
     }
+    ms.mutex.Unlock()
     if ms.tcpListen != nil {
         ms.tcpListen.Close()
     }
@@ -673,13 +702,17 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     copy(b[offset:], []byte(topic))
     offset += topiclen
     copy(b[offset:], []byte(msg))
+    ms.mutex.Lock()
     clientlen := len(ms.mqttclients)
     for i := 0 ; i < clientlen ; i++ {
+        ms.mqttclients[i].mutex.Lock()
         topiclen := uint32(len(ms.mqttclients[i].topics))
         for j := uint32(0) ; j < topiclen ; j++ {
             if *ms.mqttclients[i].topics[j] == topic {
                 ms.mqttclients[i].Write(b)
             }
         }
+        ms.mqttclients[i].mutex.Unlock()
     }
+    ms.mutex.Unlock()
 }
