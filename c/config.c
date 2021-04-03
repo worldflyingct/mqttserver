@@ -102,13 +102,13 @@ struct ConfigData* InitConfig () {
     }
     obj = cJSON_GetObjectItem(json, "mqttuser");
     if (obj) {
-        strncpy(configdata.mqttuser, obj->valuestring, 16);
+        strncpy(configdata.mqttuser, obj->valuestring, 32);
     } else {
         memcpy(configdata.mqttuser, MQTTUSER, sizeof(MQTTUSER));
     }
     obj = cJSON_GetObjectItem(json, "mqttkey");
     if (obj) {
-        strncpy(configdata.mqttkey, obj->valuestring, 16);
+        strncpy(configdata.mqttkey, obj->valuestring, 32);
     } else {
         memcpy(configdata.mqttkey, MQTTKEY, sizeof(MQTTKEY));
     }

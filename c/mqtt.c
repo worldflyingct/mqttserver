@@ -395,9 +395,11 @@ LOOP:
         if (memcmp(pass, configdata->mqttkey, passlen)) {
             unsigned char *sha256signature = NULL;
             unsigned int timestamp = 0;
+            unsigned int tsend = 0;
             for (int i = 0 ; i < passlen ; i++) {
                 if (pass[i] == '&') {
-                    sha256signature = pass + 1;
+                    tsend = i;
+                    sha256signature = pass + tsend + 1;
                     break;
                 } else if (pass[i] < '0' && pass[i] > '9') {
                     return -25;
@@ -413,12 +415,17 @@ LOOP:
                 Epoll_Delete(epoll);
                 return -27;
             }
-            unsigned char input[userlen+10+16];
-            memcpy(input, user, userlen);
-            memcpy(input + userlen, pass, 10);
-            memcpy(input + userlen + 10, configdata->mqttkey, 16);
+            unsigned char input[64];
+            memcpy(input, pass, tsend);
+            input[tsend] = '&';
+            unsigned int keylen = 0;
+            unsigned char *keyaddr = input + tsend + 1;
+            while (configdata->mqttkey[keylen] != '\0') {
+                keyaddr[keylen] = configdata->mqttkey[keylen];
+                keylen++;
+            }
             unsigned char output[32];
-            sha256(input, userlen+10+16, output);
+            sha256(input, tsend + 1 + keylen, output);
             for (int i = 0 ; i < 32 ; i++) {
                 unsigned char a = sha256signature[2*i];
                 unsigned char o;
