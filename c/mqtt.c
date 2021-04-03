@@ -39,6 +39,17 @@ struct TopicList {
 static struct TopicList *topiclisthead = NULL;
 static EPOLL *epollhead = NULL;
 
+unsigned char CheckClientStatus (char *clientid, unsigned int clientidlen) {
+    EPOLL *epoll = epollhead;
+    while (epoll != NULL) {
+        if (clientidlen == epoll->clientidlen && !memcmp(clientid, epoll->clientid, clientidlen)) {
+            return 1;
+        }
+        epoll = epoll->tail;
+    }
+    return 0;
+}
+
 void ShowClients () {
     EPOLL *epoll = epollhead;
     while (epoll != NULL) {

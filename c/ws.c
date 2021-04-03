@@ -13,7 +13,7 @@
 #define ERRORPAGE       "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nContent-Length: 84\r\nConnection: close\r\n\r\n<html><head><title>400 Bad Request</title></head><body>400 Bad Request</body></html>"
 #define SUCCESSMSG      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\nSec-WebSocket-Protocol: %s\r\n\r\n"
 #define SUCCESSPAGE     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 77\r\nConnection: close\r\n\r\n<html><head><title>Request Success</title></head><body>Success.</body></html>"
-#define MALLOCNUMHTTP   "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
+#define HTTPOKHEAD      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
 #define MALLOCNUM       "malloc num is: %d"
 #define PAGE500         "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: 104\r\nConnection: close\r\n\r\n<html><head><title>500 Internal Server Error</title></head><body>500 Internal Server Error</body></html>"
 #define magic_String    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -191,6 +191,16 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 int res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
+            } else if (!memcmp(path, "/checkclientstatus/", 19)) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                char body[2];
+                unsigned char res = CheckClientStatus(path+19, strlen(path+19));
+                body[0] = res + '0';
+                body[1] = '\0';
+                char http[128];
+                unsigned char httplen = sprintf(http, HTTPOKHEAD, 1, body);
+                Epoll_Write(epoll, http, httplen);
+                Epoll_Delete(epoll);
             } else if (!strcmp(path, "/showclients")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 ShowClients();
@@ -207,7 +217,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 char body[32];
                 unsigned char bodylen = sprintf(body, MALLOCNUM, malloc_num);
                 char http[128];
-                unsigned char httplen = sprintf(http, MALLOCNUMHTTP, bodylen, body);
+                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
                 Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
             } else {
