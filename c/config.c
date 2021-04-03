@@ -14,8 +14,6 @@
 #define KEYPATH         "server.key"
 #define MQTTUSER        "5QdISjSg40jHFyzR"
 #define MQTTKEY         "QLUL276kqXn55lBK"
-#define SERVERDOMAIN    "localhost"
-#define SERVERPORT      "80"
 #define DEFAULTCONFIG   "{\n" \
                         "  \"tcpport\": "TCPPORT",\n" \
                         "  \"tlsport\": "TLSPORT",\n" \
@@ -24,9 +22,7 @@
                         "  \"crtpath\": \""CRTPATH"\",\n" \
                         "  \"keypath\": \""KEYPATH"\",\n" \
                         "  \"mqttuser\": \""MQTTUSER"\",\n" \
-                        "  \"mqttkey\": \""MQTTKEY"\",\n" \
-                        "  \"serverdomain\": \""SERVERDOMAIN"\",\n" \
-                        "  \"serverport\": "SERVERPORT"\r\n" \
+                        "  \"mqttkey\": \""MQTTKEY"\"\n" \
                         "}"
 
 struct ConfigData configdata;
@@ -43,8 +39,6 @@ struct ConfigData* InitConfig () {
         strcpy(configdata.keypath, KEYPATH);
         strcpy(configdata.mqttuser, MQTTUSER);
         strcpy(configdata.mqttkey, MQTTKEY);
-        strcpy(configdata.serverdomain, SERVERDOMAIN);
-        configdata.serverport = atoi(SERVERPORT);
         fd = open("config.json", O_CREAT|O_WRONLY, 0777);
         if (fd < 0) {
             printf("init config file error.");
@@ -117,18 +111,6 @@ struct ConfigData* InitConfig () {
         strncpy(configdata.mqttkey, obj->valuestring, 16);
     } else {
         memcpy(configdata.mqttkey, MQTTKEY, sizeof(MQTTKEY));
-    }
-    obj = cJSON_GetObjectItem(json, "serverdomain");
-    if (obj) {
-        strncpy(configdata.serverdomain, obj->valuestring, 129);
-    } else {
-        memcpy(configdata.mqttkey, SERVERDOMAIN, sizeof(SERVERDOMAIN));
-    }
-    obj = cJSON_GetObjectItem(json, "serverport");
-    if (obj) {
-        configdata.serverport = obj->valueint;
-    } else {
-        configdata.serverport = 80;
     }
     cJSON_Delete(json);
     return &configdata;

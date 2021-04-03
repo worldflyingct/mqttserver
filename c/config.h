@@ -12,8 +12,6 @@ struct ConfigData {
     unsigned char keypath[129];
     unsigned char mqttuser[33];
     unsigned char mqttkey[33];
-    unsigned char serverdomain[129];
-    unsigned short serverport;
     SSL_CTX *ctx;
 };
 
