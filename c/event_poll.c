@@ -125,7 +125,7 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                     mod_fd_at_poll(epoll, 1);
                     epoll->writeenable = 0;
                 } else {
-                    printf("errcode: %d, in %s, at %d\n", errcode, __FILE__, __LINE__);
+                    printf("tls handshake fail, err: %d, in %s, at %d\n", errcode, __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                 }
             }
