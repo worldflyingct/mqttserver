@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
@@ -9,10 +8,13 @@
 #include "base64.h"
 #include "config.h"
 #include "mqtt.h"
+#include "smalloc.h"
 
 #define ERRORPAGE       "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nContent-Length: 84\r\nConnection: close\r\n\r\n<html><head><title>400 Bad Request</title></head><body>400 Bad Request</body></html>"
 #define SUCCESSMSG      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\nSec-WebSocket-Protocol: %s\r\n\r\n"
 #define SUCCESSPAGE     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 77\r\nConnection: close\r\n\r\n<html><head><title>Request Success</title></head><body>Success.</body></html>"
+#define MALLOCNUMHTTP   "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
+#define MALLOCNUM       "malloc num is: %d"
 #define PAGE500         "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: 104\r\nConnection: close\r\n\r\n<html><head><title>500 Internal Server Error</title></head><body>500 Internal Server Error</body></html>"
 #define magic_String    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -92,7 +94,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             len = epoll->wsuselen;
             epoll->wsuselen = 0;
             epoll->wspackagelen = 0;
-            free(epoll->wspackage);
+            sfree(epoll->wspackage);
             epoll->wspackage = NULL;
             method = epoll->httphead->httpmethod;
             path = epoll->httphead->httppath;
@@ -102,7 +104,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             p = epoll->httphead->p;
             k = epoll->httphead->k;
             headlen = epoll->httphead->headlen;
-            free(epoll->httphead);
+            sfree(epoll->httphead);
             epoll->httphead = NULL;
         } else {
             size = 30;
@@ -133,12 +135,22 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 }
             }
             if (packagelen > len) {
-                unsigned char *wspackage = (unsigned char*)malloc(packagelen);
+                unsigned char *wspackage = (unsigned char*)smalloc(packagelen);
+                if (wspackage == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
                 memcpy(wspackage, buff, len);
                 epoll->wspackage = wspackage;
                 epoll->wspackagelen = packagelen;
                 epoll->wsuselen = len;
-                struct HTTPHEAD *httphead = (struct HTTPHEAD*)malloc(sizeof(struct HTTPHEAD));
+                struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD));
+                if (httphead == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
                 httphead->httpmethod = method;
                 httphead->httppath = path;
                 httphead->httpversion = version;
@@ -179,15 +191,24 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 int res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
-            } else if (!strcmp(path, "/showclients")) { // 是mqtt请求
+            } else if (!strcmp(path, "/showclients")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 ShowClients();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
                 Epoll_Delete(epoll);
-            } else if (!strcmp(path, "/showtopics")) { // 是mqtt请求
+            } else if (!strcmp(path, "/showtopics")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 ShowTopics();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
+                Epoll_Delete(epoll);
+            } else if (!strcmp(path, "/showmallocnum")) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                long malloc_num = GetMallocNum();
+                char body[32];
+                unsigned char bodylen = sprintf(body, MALLOCNUM, malloc_num);
+                char http[128];
+                unsigned char httplen = sprintf(http, MALLOCNUMHTTP, bodylen, body);
+                Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
             } else {
                 Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
@@ -212,7 +233,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             len = epoll->wsuselen;
             epoll->wsuselen = 0;
             epoll->wspackagelen = 0;
-            free(epoll->wspackage);
+            sfree(epoll->wspackage);
         }
         unsigned char *mask;
         unsigned char *data;

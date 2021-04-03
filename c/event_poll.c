@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include "event_poll.h"
 #include "mqtt.h"
+#include "smalloc.h"
 
 #define MAXEVENTS      2048
 
@@ -22,7 +22,7 @@ EPOLL *add_fd_to_poll (int fd) {
     int fdflags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
 
-    EPOLL *epoll = (EPOLL*)malloc(sizeof(EPOLL));
+    EPOLL *epoll = (EPOLL*)smalloc(sizeof(EPOLL));
     if (epoll == NULL) {
         printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
         return NULL;
@@ -34,7 +34,7 @@ EPOLL *add_fd_to_poll (int fd) {
     ev.data.ptr = epoll;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev)) {
         printf("add fd:%d to poll, in %s, at %d\n", fd, __FILE__, __LINE__);
-        free(epoll);
+        sfree(epoll);
         return NULL;
     }
     return epoll;
@@ -67,27 +67,27 @@ void Epoll_Delete (EPOLL *epoll) {
     epoll->fd = 0;
     if (epoll->bufflen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->buff);
+        sfree(epoll->buff);
     }
     if (epoll->mqttpackagelen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->mqttpackage);
+        sfree(epoll->mqttpackage);
     }
     if (epoll->clientidlen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->clientid);
+        sfree(epoll->clientid);
     }
     if (epoll->mqttwilltopiclen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->mqttwilltopic);
+        sfree(epoll->mqttwilltopic);
     }
     if (epoll->mqttwillmsglen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->mqttwillmsg);
+        sfree(epoll->mqttwillmsg);
     }
     if (epoll->httphead) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->httphead);
+        sfree(epoll->httphead);
     }
     if (epoll->wspackagelen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
@@ -142,7 +142,7 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 res = write(epoll->fd, epoll->buff, epoll->bufflen);
             }
             if (res == epoll->bufflen) {
-                free(epoll->buff);
+                sfree(epoll->buff);
                 epoll->buff = NULL;
                 epoll->bufflen = 0;
                 epoll->writeenable = 1;
@@ -160,9 +160,13 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 res = 0;
             }
             unsigned long bufflen = epoll->bufflen - res;
-            unsigned char *buff = (unsigned char*)malloc(bufflen);
+            unsigned char *buff = (unsigned char*)smalloc(bufflen);
+            if (buff == NULL) {
+                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                return;
+            }
             memcpy(buff, epoll->buff + res, bufflen);
-            free(epoll->buff);
+            sfree(epoll->buff);
             epoll->buff = buff;
             epoll->bufflen = bufflen;
         } else {
@@ -192,7 +196,11 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             res = 0;
         }
         unsigned long bufflen = len - res;
-        unsigned char *buff = (unsigned char*)malloc(epoll->bufflen);
+        unsigned char *buff = (unsigned char*)smalloc(epoll->bufflen);
+        if (buff == NULL) {
+            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+            return;
+        }
         memcpy(buff, data + res, epoll->bufflen);
         epoll->buff = buff;
         epoll->bufflen = bufflen;
@@ -202,10 +210,14 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
         }
     } else {
         unsigned long bufflen = epoll->bufflen + len;
-        unsigned char *buff = (unsigned char*)malloc(bufflen);
+        unsigned char *buff = (unsigned char*)smalloc(bufflen);
+        if (buff == NULL) {
+            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+            return;
+        }
         if (epoll->bufflen) {
             memcpy(buff, epoll->buff, epoll->bufflen);
-            free(epoll->buff);
+            sfree(epoll->buff);
         }
         memcpy(buff + epoll->bufflen, data, len);
         epoll->buff = buff;
@@ -214,6 +226,11 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
 }
 
 int event_poll_create () {
+    int fdflags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, fdflags | O_NONBLOCK);
+    // 直接输出printf的内容，这是影响性能的。
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     if ((epollfd = epoll_create(1024)) < 0) { // epoll_create的参数在高版本中已经废弃了，填入一个大于0的数字都一样。
         printf("epoll fd create fail, in %s, at %d\n", __FILE__, __LINE__);
         return -1;
@@ -232,7 +249,7 @@ LOOP:
     while (remainepollhead != NULL) {
         EPOLL *epoll = remainepollhead;
         remainepollhead = remainepollhead->tail;
-        free(epoll);
+        sfree(epoll);
     }
     goto LOOP;
 }
