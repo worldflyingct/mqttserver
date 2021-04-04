@@ -7,12 +7,12 @@ struct SubScribeList {
     struct SubScribeList *tail;
 };
 
-int HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long len);
+void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long len);
+void DeleteMqttClient (EPOLL *epoll, unsigned char *buff);
 void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen, unsigned char *buff);
 void ShowClients ();
 void ShowTopics ();
 unsigned char CheckClientStatus (char *clientid, unsigned int clientidlen);
-int DeleteMqttClient (EPOLL *epoll, unsigned char *buff);
 unsigned int GetClientsNum ();
 
 #endif

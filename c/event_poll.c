@@ -71,14 +71,14 @@ void Epoll_Delete (EPOLL *epoll) {
     if (epoll->fd == 0) {
         return;
     }
-    if (epoll->mqttstate) {
-        DeleteMqttClient(epoll, buffer);
-    }
     struct epoll_event ev;
     // printf("fd:%d, in %s, at %d\n", epoll->fd, __FILE__, __LINE__);
     epoll_ctl(epollfd, EPOLL_CTL_DEL, epoll->fd, &ev);
     close(epoll->fd);
     epoll->fd = 0;
+    if (epoll->mqttstate) {
+        DeleteMqttClient(epoll, buffer);
+    }
     if (epoll->bufflen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         sfree(epoll->buff);

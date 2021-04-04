@@ -341,9 +341,7 @@ LOOP:
                     break;
                 case 0x2:
                     // printf("in %s, at %d\n", __FILE__, __LINE__);
-                    if (HandleMqttClientRequest(epoll, data, datalen)) {
-                        return;
-                    }
+                    HandleMqttClientRequest(epoll, data, datalen);
                     break;
                 case 0x8:
                     // printf("in %s, at %d\n", __FILE__, __LINE__);
