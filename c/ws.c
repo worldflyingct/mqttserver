@@ -217,7 +217,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
                 ShowTopics();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
                 Epoll_Delete(epoll);
-            } else if (!strcmp(path, "/showmallocnum")) {
+            } else if (!strcmp(path, "/getmallocnum")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 int malloc_num = GetMallocNum();
                 char body[16];
@@ -371,7 +371,7 @@ static void Ws_New_Connect (EPOLL *e, unsigned char *buff) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
         return;
     }
-    EPOLL *epoll = add_fd_to_poll(fd);
+    EPOLL *epoll = add_fd_to_poll(fd, 1);
     if (epoll == NULL) {
         close(fd);
         return;
@@ -412,7 +412,7 @@ int Ws_Create () {
             close(fd);
             return -3;
         }
-        EPOLL *epoll = add_fd_to_poll(fd);
+        EPOLL *epoll = add_fd_to_poll(fd, 0);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);
@@ -443,7 +443,7 @@ int Ws_Create () {
             close(fd);
             return -7;
         }
-        EPOLL *epoll = add_fd_to_poll(fd);
+        EPOLL *epoll = add_fd_to_poll(fd, 0);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);

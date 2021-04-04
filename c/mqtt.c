@@ -307,7 +307,7 @@ LOOP:
             Epoll_Delete(epoll);
             return -10;
         }
-        if (((buff[offset] & 0x04) != 0x00) && ((buff[offset] & 0x38) == 0x00)) { // 如果有遗嘱，遗嘱retain为0，遗嘱qos为0，清空session的模式。
+        if (((buff[offset] & 0x04) != 0x00) && ((buff[offset] & 0x38) != 0x00)) { // 如果有遗嘱，遗嘱retain为0，遗嘱qos为0，清空session的模式。
             printf("no support mode:0x%02x, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
             epoll->write(epoll, connsererr, sizeof(connsererr));
             Epoll_Delete(epoll);
@@ -355,7 +355,6 @@ LOOP:
             epoll->mqttwilltopic = wt;
             epoll->mqttwilltopiclen = willtopiclen;
             offset += willtopiclen;
-            printf("willtopic:%s, in %s, at %d\n", willtopic, __FILE__, __LINE__);
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
@@ -413,69 +412,70 @@ LOOP:
             return -24;
         }
         unsigned char *pass = buff + offset;
-        if (memcmp(pass, configdata->mqttkey, passlen)) {
-            unsigned char *sha256signature = NULL;
-            unsigned int timestamp = 0;
-            unsigned int tsend = 0;
-            for (int i = 0 ; i < passlen ; i++) {
-                if (pass[i] == '&') {
-                    tsend = i;
-                    sha256signature = pass + tsend + 1;
-                    break;
-                } else if (pass[i] < '0' && pass[i] > '9') {
-                    return -25;
-                }
-                timestamp += 10 * (pass[i] - '0');
+        // 密码计算开始
+        unsigned char *sha256signature = NULL;
+        unsigned int timestamp = 0;
+        unsigned int tsend = 0;
+        for (int i = 0 ; i < passlen ; i++) {
+            if (pass[i] == '&') {
+                tsend = i;
+                sha256signature = pass + tsend + 1;
+                break;
+            } else if (pass[i] < '0' && pass[i] > '9') {
+                return -25;
             }
-            if (sha256signature == NULL) {
-                return -26;
-            }
-            time_t t = time(NULL);
-            if ((t + 1800 < timestamp) || (timestamp + 1800 < t)) { // 时间误差太大，直接舍弃
+            timestamp = 10 * timestamp + pass[i] - '0';
+        }
+        if (sha256signature == NULL) {
+            return -26;
+        }
+        time_t t = time(NULL);
+        if ((t + 1800 < timestamp) || (timestamp + 1800 < t)) { // 时间误差太大，直接舍弃
+            epoll->write(epoll, connloginfail, sizeof(connloginfail));
+            Epoll_Delete(epoll);
+            return -27;
+        }
+        unsigned char input[64];
+        memcpy(input, pass, tsend);
+        input[tsend] = '&';
+        unsigned int keylen = 0;
+        unsigned char *keyaddr = input + tsend + 1;
+        while (configdata->mqttkey[keylen] != '\0') {
+            keyaddr[keylen] = configdata->mqttkey[keylen];
+            keylen++;
+        }
+        unsigned char output[32];
+        sha256_get(output, input, tsend + 1 + keylen);
+        for (int i = 0 ; i < 32 ; i++) {
+            unsigned char a = sha256signature[2*i];
+            unsigned char o;
+            if ('a' <= a && a <= 'f') {
+                o = (a - 'a' + 10) << 4;
+            } else if ('0' <= a && a <= '9') {
+                o = (a - '0') << 4;
+            } else {
+                printf("in %s, at %d\n", __FILE__, __LINE__);
                 epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
-                return -27;
+                return -28;
             }
-            unsigned char input[64];
-            memcpy(input, pass, tsend);
-            input[tsend] = '&';
-            unsigned int keylen = 0;
-            unsigned char *keyaddr = input + tsend + 1;
-            while (configdata->mqttkey[keylen] != '\0') {
-                keyaddr[keylen] = configdata->mqttkey[keylen];
-                keylen++;
+            a = sha256signature[2*i+1];
+            if ('a' <= a && a <= 'f') {
+                o |= a - 'a' + 10;
+            } else if ('0' <= a && a <= '9') {
+                o |= a - '0';
+            } else {
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                Epoll_Delete(epoll);
+                return -29;
             }
-            unsigned char output[32];
-            sha256(input, tsend + 1 + keylen, output);
-            for (int i = 0 ; i < 32 ; i++) {
-                unsigned char a = sha256signature[2*i];
-                unsigned char o;
-                if ('a' <= a && a <= 'f') {
-                    o = (a - 'a' + 10) << 4;
-                } else if ('0' <= a && a <= '9') {
-                    o = (a - '0') << 4;
-                } else {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                    Epoll_Delete(epoll);
-                    return -28;
-                }
-                a = sha256signature[2*i+1];
-                if ('a' <= a && a <= 'f') {
-                    o |= a - 'a' + 10;
-                } else if ('0' <= a && a <= '9') {
-                    o |= a - '0';
-                } else {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                    Epoll_Delete(epoll);
-                    return -29;
-                }
-                if (o != output[i]) {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                    Epoll_Delete(epoll);
-                    return -30;
-                }
+            if (o != output[i]) {
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                Epoll_Delete(epoll);
+                return -30;
             }
         }
+        // 密码计算结束
         epoll->write(epoll, connsuccess, sizeof(connsuccess));
         epoll->mqttstate = 1;
         EPOLL *e = epollhead;

@@ -35,7 +35,7 @@ static void Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
         printf("accept a new fd fail, in %s, at %d\n", __FILE__, __LINE__);
         return;
     }
-    EPOLL *epoll = add_fd_to_poll(fd);
+    EPOLL *epoll = add_fd_to_poll(fd, 1);
     if (epoll == NULL) {
         printf("add fd to poll fail, in %s, at %d\n", __FILE__, __LINE__);
         close(fd);
@@ -77,7 +77,7 @@ int Tcp_Create () {
             close(fd);
             return -3;
         }
-        EPOLL *epoll = add_fd_to_poll(fd);
+        EPOLL *epoll = add_fd_to_poll(fd, 0);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);
@@ -108,7 +108,7 @@ int Tcp_Create () {
             close(fd);
             return -7;
         }
-        EPOLL *epoll = add_fd_to_poll(fd);
+        EPOLL *epoll = add_fd_to_poll(fd, 0);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);

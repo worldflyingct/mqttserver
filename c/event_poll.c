@@ -17,10 +17,21 @@ static int wait_count;
 static struct epoll_event evs[MAXEVENTS];
 EPOLL *remainepollhead = NULL;
 
-EPOLL *add_fd_to_poll (int fd) {
-    // 设置为非阻塞
-    int fdflags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
+EPOLL *add_fd_to_poll (int fd, int opt) {
+    if (opt) {
+        // 设置为非阻塞
+        int fdflags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
+
+        int keepAlive = 1;    // 非0值，开启keepalive属性
+        int keepIdle = 6;    // 如该连接在6秒内没有任何数据往来,则进行此TCP层的探测
+        int keepInterval = 1; // 探测发包间隔为1秒
+        int keepCount = 3;        // 尝试探测的最多3次数
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepAlive, sizeof(keepAlive));
+        setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, (void*)&keepIdle, sizeof(keepIdle));
+        setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keepInterval, sizeof(keepInterval));
+        setsockopt(fd, SOL_TCP, TCP_KEEPCNT, (void *)&keepCount, sizeof(keepCount));
+    }
 
     EPOLL *epoll = (EPOLL*)smalloc(sizeof(EPOLL));
     if (epoll == NULL) {

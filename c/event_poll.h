@@ -56,7 +56,7 @@ struct EPOLL {
 
 int event_poll_create ();
 void event_poll_loop ();
-EPOLL *add_fd_to_poll (int fd);
+EPOLL *add_fd_to_poll (int fd, int opt);
 int mod_fd_at_poll (EPOLL *epoll, int eout);
 void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
 void Epoll_Delete (EPOLL *epoll);
