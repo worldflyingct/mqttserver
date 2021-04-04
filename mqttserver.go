@@ -119,7 +119,7 @@ func GetMqttDataLength (data []byte, num uint32) (uint32, uint32)  {
 
 func HasSliceValue (arr []*string, d string) bool {
     arrlen := len(arr)
-    for i := 0 ; i < arrlen ; i++ {
+    for i := 0 ; i < arrlen ; i+=1 {
         if *arr[i] == d {
             return true
         }
@@ -129,7 +129,7 @@ func HasSliceValue (arr []*string, d string) bool {
 
 func RemoveSliceByValue (arrs []*string, d string) []*string {
     arrslen := len(arrs)
-    for i := 0 ; i < arrslen ; i++ {
+    for i := 0 ; i < arrslen ; i+=1 {
         if *arrs[i] == d {
             if i == 0 {
                 return arrs[1:]
@@ -148,7 +148,7 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
     ms.mutex.Lock()
     defer ms.mutex.Unlock()
     mqttclientslen := len(ms.mqttclients)
-    for i := 0 ; i < mqttclientslen ; i++ {
+    for i := 0 ; i < mqttclientslen ; i+=1 {
         if ms.mqttclients[i] == mqttclient {
             log.Println("connect lose, clientid:", *mqttclient.clientid)
             if i == 0 {
@@ -232,7 +232,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                             offset += 2
                         }
                         tslen := len(ms.topics)
-                        for i := 0 ; i < tslen ; i++ {
+                        for i := 0 ; i < tslen ; i+=1 {
                             if ms.topics[i] == topic {
                                 ms.cb(topic, data[offset:datalen])
                                 break
@@ -240,10 +240,10 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                         }
                         ms.mutex.RLock()
                         clientlen := len(ms.mqttclients)
-                        for i := 0 ; i < clientlen ; i++ {
+                        for i := 0 ; i < clientlen ; i+=1 {
                             ms.mqttclients[i].mutex.RLock()
                             topiclen = uint32(len(ms.mqttclients[i].topics))
-                            for j := uint32(0) ; j < topiclen ; j++ {
+                            for j := uint32(0) ; j < topiclen ; j+=1 {
                                 if *ms.mqttclients[i].topics[j] == topic {
                                     ms.mqttclients[i].Write(data[:datalen])
                                 }
@@ -299,7 +299,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                                 return
                             }
                             offset += 1 // 跳过迁移服务质量等级
-                            subackdata[1]++
+                            subackdata[1] += 1
                             subackdata = append(subackdata, 0x00)
                         }
                         _, err = mqttclient.Write(subackdata)
@@ -433,7 +433,7 @@ func HandleMqttClientRequest (ms *MqttServer, mqttclient *MqttClient) {
                 log.Println("clientid:", clientid)
                 offset += clientidlen
                 clientlen := len(ms.mqttclients)
-                for i := 0 ; i < clientlen ; i++ {
+                for i := 0 ; i < clientlen ; i+=1 {
                     if *ms.mqttclients[i].clientid == clientid {
                         ms.mqttclients[i].Close()
                     }
@@ -656,7 +656,7 @@ func ListenFastHttpWebSocket (ms *MqttServer, ctx *fasthttp.RequestCtx, params *
 func CloseServer (ms *MqttServer) {
     ms.mutex.RLock()
     mqttclientslen := len(ms.mqttclients)
-    for i := 0 ; i < mqttclientslen ; i++ {
+    for i := 0 ; i < mqttclientslen ; i+=1 {
         ms.mqttclients[i].Close();
     }
     ms.mutex.RUnlock()
@@ -667,7 +667,7 @@ func CloseServer (ms *MqttServer) {
 
 func PublishData (ms *MqttServer, topic string, msg []byte) {
     tslen := len(ms.topics)
-    for i := 0 ; i < tslen ; i++ {
+    for i := 0 ; i < tslen ; i+=1 {
         if ms.topics[i] == topic {
             ms.cb(topic, msg)
         }
@@ -679,21 +679,21 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     num := 2 + topiclen + msglen
     if num < 0x80 {
         b = make([]byte, num + 2)
-        offset = 3
+        offset = 2
     } else if num < 0x4000 {
         b = make([]byte, num + 3)
-        offset = 4
+        offset = 3
     } else if num < 0x200000 {
         b = make([]byte, num + 4)
-        offset = 5
+        offset = 4
     } else {
         b = make([]byte, num + 5)
-        offset = 6
+        offset = 5
     }
     n := 0
     for num > 0 {
         b[n] |= 0x80
-        n++
+        n+=1
         b[n] = byte(num & 0x7f)
         num >>= 7
     }
@@ -706,10 +706,10 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     copy(b[offset:], []byte(msg))
     ms.mutex.RLock()
     clientlen := len(ms.mqttclients)
-    for i := 0 ; i < clientlen ; i++ {
+    for i := 0 ; i < clientlen ; i+=1 {
         ms.mqttclients[i].mutex.RLock()
         topiclen := uint32(len(ms.mqttclients[i].topics))
-        for j := uint32(0) ; j < topiclen ; j++ {
+        for j := uint32(0) ; j < topiclen ; j+=1 {
             if *ms.mqttclients[i].topics[j] == topic {
                 ms.mqttclients[i].Write(b)
             }

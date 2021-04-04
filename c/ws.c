@@ -117,7 +117,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             }
             packagelen = len;
             int l = -1;
-            for (int i = 0 ; i < size ; i++) {
+            for (int i = 0 ; i < size ; ++i) {
                 if (!strcmp(httpparam[i].key, "Sec-WebSocket-Key")) {
                     k = i;
                 }
@@ -326,7 +326,7 @@ LOOP:
             return;
         }
         if (mask) {
-            for (unsigned int i = 0 ; i < datalen ; i++) {
+            for (unsigned int i = 0 ; i < datalen ; ++i) {
                 data[i] ^= mask[i & 0x03];
             }
         }
@@ -466,36 +466,36 @@ static int ParseHttpHeader (char* str,
     unsigned int maxHttpParamNum = *httpparam_size;
     unsigned int httpParamNum = 0;
     unsigned char step = 0;
-    for (int i = 0 ; i < str_size ; i++) {
+    for (int i = 0 ; i < str_size ; ++i) {
         switch (step) {
             case 0: // 寻找mothod开始
                 if (str[i] != ' ') {
                     *method = str + i;
-                    step++;
+                    ++step;
                 }
                 break;
             case 1: // 寻找mothod的结束，path的开始
                 if (str[i] == ' ') {
                     str[i] = '\0';
-                    step++;
+                    ++step;
                 }
                 break;
             case 2: // 寻找path开始
                 if (str[i] != ' ') {
                     *path = str + i;
-                    step++;
+                    ++step;
                 }
                 break;
             case 3: // 寻找path结束
                 if (str[i] == ' ') {
                     str[i] = '\0';
-                    step++;
+                    ++step;
                 }
                 break;
             case 4: // 寻找version开始
                 if (str[i] != ' ') {
                     *version = str + i;
-                    step++;
+                    ++step;
                 }
                 break;
             case 5: // 寻找version结束
@@ -504,7 +504,7 @@ static int ParseHttpHeader (char* str,
                     step = 7;
                 } else if (str[i] == ' ') {
                     str[i] = '\0';
-                    step++;
+                    ++step;
                 }
                 break;
             case 6: // 寻找换行
@@ -527,24 +527,24 @@ static int ParseHttpHeader (char* str,
             case 8: // 寻找PARAMKEY结束
                 if (str[i] == ' ' || str[i] == ':') {
                     str[i] = '\0';
-                    step++;
+                    ++step;
                 }
                 break;
             case 9: // 寻找PARAMVALUE开始
                 if (str[i] != ' ' && str[i] != ':') {
                     httpparam[httpParamNum].value = str + i;
-                    step++;
+                    ++step;
                 }
                 break;
             case 10: // 寻找PARAMKEY结束
                 if (str[i-1] == '\r' && str[i] == '\n') {
                     str[i-1] = '\0';
-                    httpParamNum++;
+                    ++httpParamNum;
                     step = 7;
                 } else if (str[i] == ' ') {
                     str[i] = '\0';
-                    httpParamNum++;
-                    step++;
+                    ++httpParamNum;
+                    ++step;
                 }
                 break;
             case 11: // 寻找换行

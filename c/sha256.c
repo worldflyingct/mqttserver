@@ -1,14 +1,14 @@
 #include <stdint.h>
 
 typedef struct {
-    uint8_t        hash[32];
+    uint8_t     hash[32];
     uint32_t    buffer[16];
     uint32_t    state[8];
-    uint8_t        length[8];
+    uint8_t     length[8];
 } sha256;
 
 void sha256_initialize(sha256 *sha) {
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 16; ++i) {
         sha->buffer[i] = 0;
     }
     sha->state[0] = 0x6a09e667;
@@ -19,7 +19,7 @@ void sha256_initialize(sha256 *sha) {
     sha->state[5] = 0x9b05688c;
     sha->state[6] = 0x1f83d9ab;
     sha->state[7] = 0x5be0cd19;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 8; ++i) {
         sha->length[i] = 0;
     }
 }
@@ -37,7 +37,12 @@ void sha256_update(sha256 *sha,
             bits = length >> (53 - 8 * i);
         bits &= 0xff;
         if (sha->length[i] + bits > 0xff) {
-            for (int j = i - 1; j >= 0 && sha->length[j]++ == 0xff; --j);
+            for (int j = i - 1; j >= 0; --j) {
+                ++sha->length[j];
+                if (!sha->length[j]) {
+                    break;
+                }
+            }
         }
         sha->length[i] += bits;
     }

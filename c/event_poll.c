@@ -255,7 +255,7 @@ void event_poll_loop () {
 LOOP:
     wait_count = epoll_wait(epollfd, evs, MAXEVENTS, -1);
     // printf("wait_count:%d, in %s, at %d\n", wait_count, __FILE__, __LINE__);
-    for (int i = 0 ; i < wait_count ; i++) {
+    for (int i = 0 ; i < wait_count ; ++i) {
         EPOLL *epoll = evs[i].data.ptr;
         Epoll_Event(evs[i].events, epoll);
     }
