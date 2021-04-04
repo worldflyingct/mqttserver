@@ -39,6 +39,16 @@ struct TopicList {
 static struct TopicList *topiclisthead = NULL;
 static EPOLL *epollhead = NULL;
 
+unsigned int GetClientsNum () {
+    unsigned int num = 0;
+    EPOLL *epoll = epollhead;
+    while (epoll != NULL) {
+        num++;
+        epoll = epoll->tail;
+    }
+    return num;
+}
+
 unsigned char CheckClientStatus (char *clientid, unsigned int clientidlen) {
     EPOLL *epoll = epollhead;
     while (epoll != NULL) {
@@ -90,7 +100,7 @@ void ShowTopics () {
     }
 }
 
-static void SendToClient (unsigned char *buff, unsigned long packagelen, unsigned char *topic, unsigned long topiclen) {
+static void SendToClient (unsigned char *buff, unsigned int packagelen, unsigned char *topic, unsigned short topiclen) {
     struct TopicList *topiclist = topiclisthead;
     while (topiclist != NULL) {
         if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
@@ -107,10 +117,10 @@ static void SendToClient (unsigned char *buff, unsigned long packagelen, unsigne
     }
 }
 
-void PublishData (unsigned char *topic, unsigned long topiclen, unsigned char *msg, unsigned long msglen, unsigned char *buff) {
-    unsigned long len = 2 + topiclen + msglen;
-    unsigned long packagelen;
-    unsigned long offset;
+void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen, unsigned char *buff) {
+    unsigned int len = 2 + topiclen + msglen;
+    unsigned int packagelen;
+    unsigned int offset;
     if (len < 0x80) {
         packagelen = len + 2;
         offset = 3;
@@ -194,7 +204,7 @@ int DeleteMqttClient (EPOLL *epoll, unsigned char *buff) {
     }
 }
 
-static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned long *packagelen, unsigned long *offset) {
+static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned int *packagelen, unsigned int *offset) {
     if (len < 2) {
         printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
         return -1;
@@ -240,8 +250,8 @@ int HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long le
         epoll->mqttpackagelen = 0;
         sfree(epoll->mqttpackage);
     }
-    unsigned long packagelen;
-    unsigned long offset;
+    unsigned int packagelen;
+    unsigned int offset;
 LOOP:
     if (GetMqttLength(buff, len, &packagelen, &offset)) {
         Epoll_Delete(epoll);

@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static long malloc_num = 0;
+static int malloc_num = 0;
 
-void* smalloc (unsigned long size) {
+void* smalloc (unsigned int size) {
     malloc_num++;
     return malloc(size);
 }
@@ -13,6 +13,6 @@ void sfree (void *ptr) {
     free(ptr);
 }
 
-long GetMallocNum () {
+int GetMallocNum () {
     return malloc_num;
 }

@@ -57,6 +57,9 @@ int mod_fd_at_poll (EPOLL *epoll, int eout) {
 }
 
 void Epoll_Delete (EPOLL *epoll) {
+    if (epoll->fd == 0) {
+        return;
+    }
     if (epoll->mqttstate) {
         DeleteMqttClient(epoll, buffer);
     }
@@ -95,7 +98,7 @@ void Epoll_Delete (EPOLL *epoll) {
     }
     if (epoll->tls) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        SSL_shutdown(epoll->tls);
+        // SSL_shutdown(epoll->tls);
         SSL_free(epoll->tls);
     }
     epoll->tail = remainepollhead;
@@ -143,7 +146,6 @@ static void Epoll_Event (int event, EPOLL *epoll) {
             }
             if (res == epoll->bufflen) {
                 sfree(epoll->buff);
-                epoll->buff = NULL;
                 epoll->bufflen = 0;
                 epoll->writeenable = 1;
                 mod_fd_at_poll(epoll, 0);
@@ -159,7 +161,7 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 }
                 res = 0;
             }
-            unsigned long bufflen = epoll->bufflen - res;
+            unsigned int bufflen = epoll->bufflen - res;
             unsigned char *buff = (unsigned char*)smalloc(bufflen);
             if (buff == NULL) {
                 printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
@@ -195,7 +197,7 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             }
             res = 0;
         }
-        unsigned long bufflen = len - res;
+        unsigned int bufflen = len - res;
         unsigned char *buff = (unsigned char*)smalloc(epoll->bufflen);
         if (buff == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
@@ -209,7 +211,7 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             mod_fd_at_poll(epoll, 1);
         }
     } else {
-        unsigned long bufflen = epoll->bufflen + len;
+        unsigned int bufflen = epoll->bufflen + len;
         unsigned char *buff = (unsigned char*)smalloc(bufflen);
         if (buff == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);

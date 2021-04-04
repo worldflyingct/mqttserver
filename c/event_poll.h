@@ -15,7 +15,7 @@ struct HTTPHEAD {
     char *httppath;
     char *httpversion;
     struct HTTPPARAM httpparam[30];
-    unsigned long httpparam_size;
+    unsigned short httpparam_size;
     int k;
     int p;
     int headlen;
@@ -27,8 +27,8 @@ struct EPOLL {
     WRITE_FUNCTION *write;
     DELETE_FUNCTION *delete;
     unsigned char *buff;
-    unsigned long bufflen;
-    unsigned long writeenable;
+    unsigned int bufflen;
+    unsigned char writeenable;
     EPOLL *thead;
     EPOLL *ttail;
     EPOLL *head;
@@ -37,8 +37,8 @@ struct EPOLL {
     unsigned char tlsok; // 0为尚未握手成功，1为握手成功
     unsigned char mqttstate; // 0为未注，1为注册
     unsigned char *mqttpackage;
-    unsigned long mqttpackagelen; // 当前包的理论大小
-    unsigned long mqttuselen; // 已经消耗的缓存
+    unsigned int mqttpackagelen; // 当前包的理论大小
+    unsigned int mqttuselen; // 已经消耗的缓存
     unsigned char *clientid;
     unsigned short clientidlen;
     unsigned char *mqttwilltopic;
