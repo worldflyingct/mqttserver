@@ -123,16 +123,16 @@ void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *
     unsigned int offset;
     if (len < 0x80) {
         packagelen = len + 2;
-        offset = 3;
+        offset = 2;
     } else if (len < 0x4000) {
         packagelen = len + 3;
-        offset = 4;
+        offset = 3;
     } else if (len < 0x200000) {
         packagelen = len + 4;
-        offset = 5;
+        offset = 4;
     } else {
         packagelen = len + 5;
-        offset = 6;
+        offset = 5;
     }
     unsigned char n = 0;
     while (len > 0) {
@@ -329,7 +329,7 @@ LOOP:
         }
         unsigned short clientidlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
         offset += 2;
-        if (packagelen < offset + 2) {
+        if (packagelen < offset + clientidlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return -14;
@@ -337,19 +337,24 @@ LOOP:
         unsigned char *clientid = buff + offset;
         offset += clientidlen;
         if (needwill) {
+            if (packagelen < offset + 2) {
+                printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                Epoll_Delete(epoll);
+                return -15;
+            }
             unsigned short willtopiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
             offset += 2;
             if (packagelen < offset + willtopiclen) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -15;
+                return -16;
             }
             unsigned char *willtopic = buff + offset;
             unsigned char *wt = (unsigned char*)smalloc(willtopiclen * sizeof(unsigned char));
             if (wt == NULL) {
                 printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -16;
+                return -17;
             }
             memcpy(wt, willtopic, willtopiclen);
             epoll->mqttwilltopic = wt;
@@ -358,58 +363,58 @@ LOOP:
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -17;
+                return -18;
             }
             unsigned short willmsglen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
             offset += 2;
             if (packagelen < offset + willmsglen) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -18;
+                return -19;
             }
             unsigned char *willmsg = buff + offset;
             unsigned char *wm = (unsigned char*)smalloc(willmsglen * sizeof(unsigned char));
             if (wm == NULL) {
                 printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -19;
+                return -20;
             }
             memcpy(wm, willmsg, willmsglen);
             epoll->mqttwillmsg = wm;
             epoll->mqttwillmsglen = willmsglen;
             offset += willmsglen;
-            if (packagelen < offset + 2) {
-                printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
-                Epoll_Delete(epoll);
-                return -20;
-            }
+        }
+        if (packagelen < offset + 2) {
+            printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+            Epoll_Delete(epoll);
+            return -21;
         }
         unsigned short userlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + userlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -21;
+            return -22;
         }
         unsigned char *user = buff + offset;
         struct ConfigData *configdata = GetConfig();
         if (strncmp(user, configdata->mqttuser, userlen)) { // 用户名错误
             epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
-            return -22;
+            return -23;
         }
         offset += userlen;
         if (packagelen < offset + 2) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -23;
+            return -24;
         }
         unsigned short passlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + passlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -24;
+            return -25;
         }
         unsigned char *pass = buff + offset;
         // 密码计算开始
@@ -422,18 +427,18 @@ LOOP:
                 sha256signature = pass + tsend + 1;
                 break;
             } else if (pass[i] < '0' && pass[i] > '9') {
-                return -25;
+                return -26;
             }
             timestamp = 10 * timestamp + pass[i] - '0';
         }
         if (sha256signature == NULL) {
-            return -26;
+            return -27;
         }
         time_t t = time(NULL);
         if ((t + 1800 < timestamp) || (timestamp + 1800 < t)) { // 时间误差太大，直接舍弃
             epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
-            return -27;
+            return -28;
         }
         unsigned char input[64];
         memcpy(input, pass, tsend);
@@ -457,7 +462,7 @@ LOOP:
                 printf("in %s, at %d\n", __FILE__, __LINE__);
                 epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
-                return -28;
+                return -29;
             }
             a = sha256signature[2*i+1];
             if ('a' <= a && a <= 'f') {
@@ -467,12 +472,12 @@ LOOP:
             } else {
                 epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
-                return -29;
+                return -30;
             }
             if (o != output[i]) {
                 epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
-                return -30;
+                return -31;
             }
         }
         // 密码计算结束
@@ -490,7 +495,7 @@ LOOP:
         if (cid == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -31;
+            return -32;
         }
         memcpy(cid, clientid, clientidlen);
 
@@ -508,12 +513,12 @@ LOOP:
             if ((buff[0] & 0x0f) != 0x00) { // 本程序不处理dup，qos与retain不为0的报文。
                 printf("publish dup,qos or retain is not 0, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -32;
+                return -33;
             }
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -33;
+                return -34;
             }
             unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
             offset += 2;
@@ -521,16 +526,16 @@ LOOP:
             SendToClient(buff, packagelen, topic, topiclen);
         } else if (type == PUBACK || type == PUBREC || type == PUBREL || type == PUBCOMP) {
             Epoll_Delete(epoll);
-            return -34;
+            return -35;
         } else if (type == SUBSCRIBE) {
             if ((buff[0] & 0x0f) != 0x02) {
                 Epoll_Delete(epoll);
-                return -35;
+                return -36;
             }
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -36;
+                return -37;
             }
             unsigned char suback[1024] = { SUBACK, 0x02, buff[offset], buff[offset+1] };
             offset += 2;
@@ -539,25 +544,25 @@ LOOP:
                 if (packagelen < offset + 2) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
-                    return -37;
+                    return -38;
                 }
                 unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
                 offset += 2;
                 if (packagelen < offset + topiclen) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
-                    return -38;
+                    return -39;
                 }
                 unsigned char *topic = buff + offset;
                 offset += topiclen;
                 if (packagelen < offset + 1) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
-                    return -39;
+                    return -40;
                 }
                 if (buff[offset] != 0x00 && buff[offset] != 0x01 && buff[offset] != 0x02) {
                     Epoll_Delete(epoll);
-                    return -40;
+                    return -41;
                 }
                 offset += 1;
                 struct TopicList *topiclist = topiclisthead;
@@ -572,13 +577,13 @@ LOOP:
                     if (topiclist == NULL) {
                         printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                         Epoll_Delete(epoll);
-                        return -41;
+                        return -42;
                     }
                     unsigned char *t = (unsigned char*)smalloc(topiclen);
                     if (t == NULL) {
                         printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                         Epoll_Delete(epoll);
-                        return -42;
+                        return -43;
                     }
                     memcpy(t, topic, topiclen);
                     topiclist->topic = t;
@@ -618,7 +623,7 @@ LOOP:
                     if (sbbl == NULL) {
                         printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                         Epoll_Delete(epoll);
-                        return -43;
+                        return -44;
                     }
                     sbbl->topiclist = topiclist;
                     sbbl->head = NULL;
@@ -637,12 +642,12 @@ LOOP:
             if ((buff[0] & 0x0f) != 0x02) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -44;
+                return -45;
             }
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -45;
+                return -46;
             }
             unsigned char unsuback[4] = {UNSUBACK, 0x02, buff[offset], buff[offset+1]};
             offset += 2;
@@ -650,14 +655,14 @@ LOOP:
                 if (packagelen < offset + 2) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
-                    return -46;
+                    return -47;
                 }
                 unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
                 offset += 2;
                 if (packagelen < offset + topiclen) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
-                    return -47;
+                    return -48;
                 }
                 unsigned char *topic = buff + offset;
                 struct SubScribeList *sbbl = epoll->sbbl;
@@ -677,17 +682,17 @@ LOOP:
             if (buff[1] != 0x00 || packagelen != 2) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
-                return -48;
+                return -49;
             }
             epoll->write(epoll, pingresp, sizeof(pingresp));
         } else if (type == DISCONNECT) {
             // printf("in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -49;
+            return -50;
         } else {
             printf("mqtt cmd:0x%02x, in %s, at %d\n", type, __FILE__, __LINE__);
             Epoll_Delete(epoll);
-            return -50;
+            return -51;
         }
     }
     if (packagelen == len) {
