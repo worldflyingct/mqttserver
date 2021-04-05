@@ -18,7 +18,6 @@
 #define magic_String    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 static const unsigned char pong[] = {0x8a, 0x00};
-static const unsigned char disconn[] = {0x88, 0x00};
 
 static int ParseHttpHeader (char* str,
                                 unsigned int str_size,
@@ -76,168 +75,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             }
         }
         return;
-    } else if (!epoll->wsstate) {
-        char *method, *path, *version;
-        struct HTTPPARAM httpparam[30];
-        unsigned int size;
-        int k, p, headlen;
-        unsigned long packagelen;
-        if (epoll->httphead != NULL) {
-            memcpy(epoll->wspackage + epoll->wspackagelen, buff, len);
-            packagelen = epoll->wspackagelen;
-            epoll->wsuselen += len;
-            if (epoll->wsuselen < epoll->wspackagelen) {
-                return;
-            }
-            memcpy(buff, epoll->wspackage, epoll->wsuselen);
-            len = epoll->wsuselen;
-            epoll->wsuselen = 0;
-            epoll->wspackagelen = 0;
-            sfree(epoll->wspackage);
-            method = epoll->httphead->httpmethod;
-            path = epoll->httphead->httppath;
-            version = epoll->httphead->httpversion;
-            memcpy(httpparam, epoll->httphead->httpparam, epoll->httphead->httpparam_size);
-            size = epoll->httphead->httpparam_size;
-            p = epoll->httphead->p;
-            k = epoll->httphead->k;
-            headlen = epoll->httphead->headlen;
-            sfree(epoll->httphead);
-            epoll->httphead = NULL;
-        } else {
-            size = 30;
-            k = -1;
-            p = -1;
-            headlen = ParseHttpHeader(buff, len, &method, &path, &version, httpparam, &size);
-            if (headlen < 0) {
-                printf("Parse Http Header fail, in %s, at %d\n", __FILE__, __LINE__);
-                Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                Epoll_Delete(epoll);
-                return;
-            }
-            packagelen = len;
-            int l = -1;
-            for (int i = 0 ; i < size ; ++i) {
-                if (!strcmp(httpparam[i].key, "Sec-WebSocket-Key")) {
-                    k = i;
-                }
-                if (!strcmp(httpparam[i].key, "Sec-WebSocket-Protocol")) {
-                    p = i;
-                }
-                if (!strcmp(httpparam[i].key, "Content-Length")) {
-                    packagelen = atoi(httpparam[i].value) + headlen;
-                    l = i;
-                }
-                if (k != -1 && p != -1 && l != -1) {
-                    break;
-                }
-            }
-            if (packagelen > len) {
-                unsigned char *wspackage = (unsigned char*)smalloc(packagelen);
-                if (wspackage == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
-                    return;
-                }
-                memcpy(wspackage, buff, len);
-                epoll->wspackage = wspackage;
-                epoll->wspackagelen = packagelen;
-                epoll->wsuselen = len;
-                struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD));
-                if (httphead == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
-                    return;
-                }
-                httphead->httpmethod = method;
-                httphead->httppath = path;
-                httphead->httpversion = version;
-                memcpy(httphead->httpparam, httpparam, size);
-                httphead->httpparam_size = size;
-                httphead->p = p;
-                httphead->k = k;
-                httphead->headlen = headlen;
-                epoll->httphead = httphead;
-                return;
-            }
-        }
-        if (!strcmp(method, "GET")) { // 是GET请求
-            if (!strcmp(path, "/mqtt")) { // 是mqtt请求
-                if (k == -1) {
-                    printf("not found Sec-WebSocket-Key, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                    Epoll_Delete(epoll);
-                    return;
-                }
-                if (p == -1) {
-                    printf("not found Sec-WebSocket-Protocol, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                    Epoll_Delete(epoll);
-                    return;
-                }
-                char input[64];
-                int keylen = strlen(httpparam[k].value);
-                memcpy(input, httpparam[k].value, keylen);
-                memcpy(input + keylen, magic_String, sizeof(magic_String));
-                char output[20];
-                sha1(input, keylen + sizeof(magic_String)-1, output);
-                char base64[30];
-                int base64_len = 30;
-                base64_encode(output, 20, base64, &base64_len);
-                base64[base64_len] = '\0';
-                char s[256];
-                int res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
-                Epoll_Write(epoll, s, res_len);
-                epoll->wsstate = 1;
-            } else if (!strcmp(path, "/getclientsnum")) {
-                // printf("in %s, at %d\n", __FILE__, __LINE__);
-                unsigned int num = GetClientsNum();
-                char body[16];
-                unsigned char bodylen = sprintf(body, "%u", num);
-                char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
-                Epoll_Write(epoll, http, httplen);
-                Epoll_Delete(epoll);
-            } else if (!memcmp(path, "/checkclientstatus/", 19)) {
-                // printf("in %s, at %d\n", __FILE__, __LINE__);
-                unsigned char res = CheckClientStatus(path+19, strlen(path+19));
-                char body[16];
-                unsigned char bodylen = sprintf(body, "%u", res);
-                char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
-                Epoll_Write(epoll, http, httplen);
-                Epoll_Delete(epoll);
-            } else if (!strcmp(path, "/showclients")) {
-                // printf("in %s, at %d\n", __FILE__, __LINE__);
-                ShowClients();
-                Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
-                Epoll_Delete(epoll);
-            } else if (!strcmp(path, "/showtopics")) {
-                // printf("in %s, at %d\n", __FILE__, __LINE__);
-                ShowTopics();
-                Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
-                Epoll_Delete(epoll);
-            } else if (!strcmp(path, "/getmallocnum")) {
-                // printf("in %s, at %d\n", __FILE__, __LINE__);
-                int malloc_num = GetMallocNum();
-                char body[16];
-                unsigned char bodylen = sprintf(body, "%d", malloc_num);
-                char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
-                Epoll_Write(epoll, http, httplen);
-                Epoll_Delete(epoll);
-            } else {
-                Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-                Epoll_Delete(epoll);
-            }
-        } else if (!strcmp(method, "POST")) { // restful请求发送消息，过几天再完成它。
-            Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-            Epoll_Delete(epoll);
-        } else {
-            Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
-            Epoll_Delete(epoll);
-        }
-    } else {
+    } else if (epoll->wsstate) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         if (epoll->wspackagelen) {
             memcpy(epoll->wspackage + epoll->wsuselen, buff, len);
@@ -358,6 +196,169 @@ LOOP:
         len -= packagelen;
         memcpy(buff, buff + packagelen, len);
         goto LOOP;
+    } else {
+        char *method, *path, *version;
+        struct HTTPPARAM httpparam[30];
+        unsigned int size;
+        int k, p, headlen;
+        unsigned long packagelen;
+        if (epoll->httphead != NULL) {
+            memcpy(epoll->wspackage + epoll->wspackagelen, buff, len);
+            packagelen = epoll->wspackagelen;
+            epoll->wsuselen += len;
+            if (epoll->wsuselen < epoll->wspackagelen) {
+                return;
+            }
+            memcpy(buff, epoll->wspackage, epoll->wsuselen);
+            len = epoll->wsuselen;
+            epoll->wsuselen = 0;
+            epoll->wspackagelen = 0;
+            sfree(epoll->wspackage);
+            method = epoll->httphead->httpmethod;
+            path = epoll->httphead->httppath;
+            version = epoll->httphead->httpversion;
+            memcpy(httpparam, epoll->httphead->httpparam, epoll->httphead->httpparam_size);
+            size = epoll->httphead->httpparam_size;
+            p = epoll->httphead->p;
+            k = epoll->httphead->k;
+            headlen = epoll->httphead->headlen;
+            sfree(epoll->httphead);
+            epoll->httphead = NULL;
+        } else {
+            size = 30;
+            k = -1;
+            p = -1;
+            headlen = ParseHttpHeader(buff, len, &method, &path, &version, httpparam, &size);
+            if (headlen < 0) {
+                printf("Parse Http Header fail, in %s, at %d\n", __FILE__, __LINE__);
+                Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+                Epoll_Delete(epoll);
+                return;
+            }
+            packagelen = len;
+            int l = -1;
+            for (int i = 0 ; i < size ; ++i) {
+                if (!strcmp(httpparam[i].key, "Sec-WebSocket-Key")) {
+                    k = i;
+                }
+                if (!strcmp(httpparam[i].key, "Sec-WebSocket-Protocol")) {
+                    p = i;
+                }
+                if (!strcmp(httpparam[i].key, "Content-Length")) {
+                    packagelen = atoi(httpparam[i].value) + headlen;
+                    l = i;
+                }
+                if (k != -1 && p != -1 && l != -1) {
+                    break;
+                }
+            }
+            if (packagelen > len) {
+                unsigned char *wspackage = (unsigned char*)smalloc(packagelen);
+                if (wspackage == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Write(epoll, PAGE500, sizeof(PAGE500));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                memcpy(wspackage, buff, len);
+                epoll->wspackage = wspackage;
+                epoll->wspackagelen = packagelen;
+                epoll->wsuselen = len;
+                struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD));
+                if (httphead == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Write(epoll, PAGE500, sizeof(PAGE500));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                httphead->httpmethod = method;
+                httphead->httppath = path;
+                httphead->httpversion = version;
+                memcpy(httphead->httpparam, httpparam, size);
+                httphead->httpparam_size = size;
+                httphead->p = p;
+                httphead->k = k;
+                httphead->headlen = headlen;
+                epoll->httphead = httphead;
+                return;
+            }
+        }
+        if (!strcmp(method, "GET")) { // 是GET请求
+            if (!strcmp(path, "/mqtt")) { // 是mqtt请求
+                if (k == -1) {
+                    printf("not found Sec-WebSocket-Key, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                if (p == -1) {
+                    printf("not found Sec-WebSocket-Protocol, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                char input[64];
+                int keylen = strlen(httpparam[k].value);
+                memcpy(input, httpparam[k].value, keylen);
+                memcpy(input + keylen, magic_String, sizeof(magic_String));
+                char output[20];
+                sha1(input, keylen + sizeof(magic_String)-1, output);
+                char base64[30];
+                int base64_len = 30;
+                base64_encode(output, 20, base64, &base64_len);
+                base64[base64_len] = '\0';
+                char s[256];
+                int res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
+                Epoll_Write(epoll, s, res_len);
+                epoll->wsstate = 1;
+            } else if (!strcmp(path, "/getclientsnum")) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                unsigned int num = GetClientsNum();
+                char body[16];
+                unsigned char bodylen = sprintf(body, "%u", num);
+                char http[128];
+                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                Epoll_Write(epoll, http, httplen);
+                Epoll_Delete(epoll);
+            } else if (!memcmp(path, "/checkclientstatus/", 19)) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                unsigned char res = CheckClientStatus(path+19, strlen(path+19));
+                char body[16];
+                unsigned char bodylen = sprintf(body, "%u", res);
+                char http[128];
+                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                Epoll_Write(epoll, http, httplen);
+                Epoll_Delete(epoll);
+            } else if (!strcmp(path, "/showclients")) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                ShowClients();
+                Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
+                Epoll_Delete(epoll);
+            } else if (!strcmp(path, "/showtopics")) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                ShowTopics();
+                Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
+                Epoll_Delete(epoll);
+            } else if (!strcmp(path, "/getmallocnum")) {
+                // printf("in %s, at %d\n", __FILE__, __LINE__);
+                int malloc_num = GetMallocNum();
+                char body[16];
+                unsigned char bodylen = sprintf(body, "%d", malloc_num);
+                char http[128];
+                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                Epoll_Write(epoll, http, httplen);
+                Epoll_Delete(epoll);
+            } else {
+                Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+                Epoll_Delete(epoll);
+            }
+        } else if (!strcmp(method, "POST")) { // restful请求发送消息，过几天再完成它。
+            Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+            Epoll_Delete(epoll);
+        } else {
+            Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
+            Epoll_Delete(epoll);
+        }
     }
 }
 
