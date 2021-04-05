@@ -45,7 +45,7 @@ int base64_encode (const unsigned char* data, unsigned int size, unsigned char* 
         if (size % 3 == 2) {
             base64[j] = base64table[((data[i-1] & 0xf0) >> 4) | ((data[i-2] & 0x03) << 4)];
             ++j;
-            base64[j] = base64table[(data[i-1] & 0x0f) << 2]
+            base64[j] = base64table[(data[i-1] & 0x0f) << 2];
             ++j;
         } else {
             base64[j] = base64table[(data[i-2] & 0x03) << 4];
@@ -88,7 +88,7 @@ int base64_decode (const unsigned char* base64, unsigned int length, unsigned ch
             break;
         }
         data[j] = ((tmp3 & 0x03) << 6) | (tmp4 & 0x3f);
-        ++j
+        ++j;
     }
     *size = j;
     return 0;
