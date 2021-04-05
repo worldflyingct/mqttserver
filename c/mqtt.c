@@ -29,10 +29,16 @@ static const unsigned char connloginfail[] = {CONNACK, 0x02, 0x00, 0x04};
 static const unsigned char connnologin[]   = {CONNACK, 0x02, 0x00, 0x05};
 static const unsigned char pingresp[]      = {PINGRESP, 0x00};
 
+struct TopicToEpoll {
+    EPOLL *epoll;
+    struct TopicToEpoll *head;
+    struct TopicToEpoll *tail;
+};
+
 struct TopicList {
     unsigned char *topic;
     unsigned short topiclen;
-    EPOLL *epoll;
+    struct TopicToEpoll *tte;
     struct TopicList *head;
     struct TopicList *tail;
 };
@@ -87,13 +93,13 @@ void ShowTopics () {
         memcpy(topic, topiclist->topic, topiclist->topiclen);
         topic[topiclist->topiclen] = '\0';
         printf("topic:%s clientid:", topic);
-        EPOLL *epoll = topiclist->epoll;
-        while (epoll != NULL) {
-            unsigned char clientid[epoll->clientidlen+1];
-            memcpy(clientid, epoll->clientid, epoll->clientidlen);
-            clientid[epoll->clientidlen] = '\0';
+        struct TopicToEpoll *tte = topiclist->tte;
+        while (tte != NULL) {
+            unsigned char clientid[tte->epoll->clientidlen+1];
+            memcpy(clientid, tte->epoll->clientid, tte->epoll->clientidlen);
+            clientid[tte->epoll->clientidlen] = '\0';
             printf("%s ", clientid);
-            epoll = epoll->ttail;
+            tte = tte->tail;
         }
         printf("\n");
         topiclist = topiclist->tail;
@@ -109,10 +115,11 @@ static void SendToClient (unsigned char *buff, unsigned int packagelen, unsigned
         topiclist = topiclist->tail;
     }
     if (topiclist != NULL) {
-        EPOLL *epoll = topiclist->epoll;
-        while (epoll != NULL) {
+        struct TopicToEpoll *tte = topiclist->tte;
+        while (tte != NULL) {
+            EPOLL *epoll = tte->epoll;
             epoll->write(epoll, buff, packagelen);
-            epoll = epoll->ttail;
+            tte = tte->tail;
         }
     }
 }
@@ -161,15 +168,26 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
         sbbl->tail->head = sbbl->head;
     }
     struct TopicList *topiclist = sbbl->topiclist;
-    if (epoll->thead) {
-        epoll->thead->ttail = epoll->ttail;
-    } else {
-        topiclist->epoll = epoll->ttail;
+    sfree(sbbl);
+    struct TopicToEpoll *tte = topiclist->tte;
+    while (tte != NULL) {
+        if (tte->epoll == epoll) {
+            break;
+        }
+        tte = tte->tail;
     }
-    if (epoll->ttail) {
-        epoll->ttail->thead = epoll->thead;
+    if (tte != NULL) {
+        if (tte->head) {
+            tte->head->tail = tte->tail;
+        } else {
+            topiclist->tte = tte->tail;
+        }
+        if (tte->tail) {
+            tte->tail->head = tte->head;
+        }
+        sfree(tte);
     }
-    if (topiclist->epoll == NULL) {
+    if (topiclist->tte == NULL) {
         if (topiclist->head) {
             topiclist->head->tail = topiclist->tail;
         } else {
@@ -181,7 +199,6 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
         sfree(topiclist->topic);
         sfree(topiclist);
     }
-    sfree(sbbl);
 }
 
 void DeleteMqttClient (EPOLL *epoll, unsigned char *buff) {
@@ -366,7 +383,7 @@ LOOP:
                     memcpy(t, topic, topiclen);
                     topiclist->topic = t;
                     topiclist->topiclen = topiclen;
-                    topiclist->epoll = NULL;
+                    topiclist->tte = NULL;
                     topiclist->head = NULL;
                     topiclist->tail = topiclisthead;
                     if (topiclisthead) {
@@ -374,20 +391,27 @@ LOOP:
                     }
                     topiclisthead = topiclist;
                 }
-                EPOLL *eobj = topiclist->epoll;
-                while (eobj != NULL) {
-                    if (eobj == epoll) {
+                struct TopicToEpoll *tte = topiclist->tte;
+                while (tte != NULL) {
+                    if (tte->epoll == epoll) {
                         break;
                     }
-                    eobj = eobj->ttail;
+                    tte = tte->tail;
                 }
-                if (eobj == NULL) {
-                    epoll->thead = NULL;
-                    epoll->ttail = topiclist->epoll;
-                    if (topiclist->epoll) {
-                        topiclist->epoll->thead = epoll;
+                if (tte == NULL) {
+                    tte = (struct TopicToEpoll*)smalloc(sizeof(struct TopicToEpoll));
+                    if (tte == NULL) {
+                        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                        Epoll_Delete(epoll);
+                        return;
                     }
-                    topiclist->epoll = epoll;
+                    tte->epoll = epoll;
+                    tte->head = NULL;
+                    tte->tail = topiclist->tte;
+                    if (topiclist->tte) {
+                        topiclist->tte->head = tte;
+                    }
+                    topiclist->tte = tte;
                 }
                 struct SubScribeList *sbbl = epoll->sbbl;
                 while (sbbl != NULL) {

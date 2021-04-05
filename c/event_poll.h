@@ -29,8 +29,6 @@ struct EPOLL {
     unsigned char *buff;
     unsigned int bufflen;
     unsigned char writeenable;
-    EPOLL *thead;
-    EPOLL *ttail;
     EPOLL *head;
     EPOLL *tail;
     SSL *tls;
