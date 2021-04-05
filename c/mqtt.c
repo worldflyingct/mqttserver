@@ -635,12 +635,14 @@ LOOP:
                 sha256signature = pass + tsend + 1;
                 break;
             } else if (pass[i] < '0' && pass[i] > '9') {
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
                 return;
             }
             timestamp = 10 * timestamp + pass[i] - '0';
         }
         if (sha256signature == NULL) {
+            epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
             return;
         }
