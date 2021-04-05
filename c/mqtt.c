@@ -635,15 +635,17 @@ LOOP:
                 sha256signature = pass + tsend + 1;
                 break;
             } else if (pass[i] < '0' && pass[i] > '9') {
+                Epoll_Delete(epoll);
                 return;
             }
             timestamp = 10 * timestamp + pass[i] - '0';
         }
         if (sha256signature == NULL) {
+            Epoll_Delete(epoll);
             return;
         }
         time_t t = time(NULL);
-        if ((t + 1800 < timestamp) || (timestamp + 1800 < t)) { // 时间误差太大，直接舍弃
+        if ((t + 600 < timestamp) || (timestamp + 600 < t)) { // 时间误差太大，直接舍弃
             epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
             return;
