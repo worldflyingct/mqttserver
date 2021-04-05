@@ -20,6 +20,7 @@ static void Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt
             if (errcode == SSL_ERROR_WANT_WRITE) {
                 epoll->tlsok = 0;
                 mod_fd_at_poll(epoll, 1);
+                epoll->writeenable = 0;
             }
         }
         return;

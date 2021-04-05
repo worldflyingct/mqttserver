@@ -40,6 +40,7 @@ EPOLL *add_fd_to_poll (int fd, int opt) {
     }
     memset(epoll, 0, sizeof(EPOLL));
     epoll->fd = fd;
+    epoll->listenwrite = 1;
     struct epoll_event ev;
     ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
     ev.data.ptr = epoll;
@@ -54,9 +55,17 @@ EPOLL *add_fd_to_poll (int fd, int opt) {
 int mod_fd_at_poll (EPOLL *epoll, int eout) {
     struct epoll_event ev;
     if (eout) {
+        if (epoll->listenwrite) {
+            return 0;
+        }
         ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
+        epoll->listenwrite = 1;
     } else {
+        if (!epoll->listenwrite) {
+            return 0;
+        }
         ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP | EPOLLIN;
+        epoll->listenwrite = 0;
     }
     ev.data.ptr = epoll;
     int fd = epoll->fd;
@@ -126,18 +135,13 @@ static void Epoll_Event (int event, EPOLL *epoll) {
             if(r_code == 1) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 epoll->tlsok = 1;
-                if (epoll->writeenable) {
-                    epoll->writeenable = 0;
-                    mod_fd_at_poll(epoll, 1);
-                }
+                mod_fd_at_poll(epoll, 1);
             } else {
                 int errcode = SSL_get_error(epoll->tls, r_code);
                 if (errcode == SSL_ERROR_WANT_READ) {
                     mod_fd_at_poll(epoll, 0);
-                    epoll->writeenable = 1;
                 } else if (errcode == SSL_ERROR_WANT_WRITE) {
                     mod_fd_at_poll(epoll, 1);
-                    epoll->writeenable = 0;
                 } else {
                     printf("tls handshake fail, err: %d, in %s, at %d\n", errcode, __FILE__, __LINE__);
                     Epoll_Delete(epoll);

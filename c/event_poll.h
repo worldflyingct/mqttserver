@@ -34,6 +34,7 @@ struct EPOLL {
     EPOLL *head;
     EPOLL *tail;
     SSL *tls;
+    unsigned char listenwrite;
     unsigned char tlsok; // 0为尚未握手成功，1为握手成功
     unsigned char mqttstate; // 0为未注，1为注册
     unsigned char *mqttpackage;

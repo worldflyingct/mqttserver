@@ -72,6 +72,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             if (errcode == SSL_ERROR_WANT_WRITE) {
                 epoll->tlsok = 0;
                 mod_fd_at_poll(epoll, 1);
+                epoll->writeenable = 0;
             }
         }
         return;
