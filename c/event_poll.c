@@ -83,7 +83,7 @@ void Epoll_Delete (EPOLL *epoll) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         sfree(epoll->buff);
     }
-    if (epoll->mqttpackagelen) {
+    if (epoll->mqttpackagecap) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         sfree(epoll->mqttpackage);
     }
@@ -103,13 +103,13 @@ void Epoll_Delete (EPOLL *epoll) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         sfree(epoll->httphead);
     }
-    if (epoll->wspackagelen) {
+    if (epoll->wspackagecap) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        free(epoll->wspackage);
+        sfree(epoll->wspackage);
     }
     if (epoll->tls) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        // SSL_shutdown(epoll->tls);
+        SSL_shutdown(epoll->tls);
         SSL_free(epoll->tls);
     }
     epoll->tail = remainepollhead;
@@ -160,9 +160,19 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 epoll->bufflen = 0;
                 epoll->writeenable = 1;
                 mod_fd_at_poll(epoll, 0);
-                return;
-            }
-            if (res < 0) {
+            } else if (res > 0) {
+                unsigned int bufflen = epoll->bufflen - res;
+                unsigned char *buff = (unsigned char*)smalloc(bufflen);
+                if (buff == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                memcpy(buff, epoll->buff + res, bufflen);
+                sfree(epoll->buff);
+                epoll->buff = buff;
+                epoll->bufflen = bufflen;
+            } else if (res < 0) {
                 if (epoll->tls) {
                     int errcode = SSL_get_error(epoll->tls, res);
                     if (errcode == SSL_ERROR_WANT_READ) {
@@ -170,18 +180,7 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                         mod_fd_at_poll(epoll, 0);
                     }
                 }
-                res = 0;
             }
-            unsigned int bufflen = epoll->bufflen - res;
-            unsigned char *buff = (unsigned char*)smalloc(bufflen);
-            if (buff == NULL) {
-                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                return;
-            }
-            memcpy(buff, epoll->buff + res, bufflen);
-            sfree(epoll->buff);
-            epoll->buff = buff;
-            epoll->bufflen = bufflen;
         } else {
             epoll->read(epoll, buffer);
         }
@@ -209,12 +208,13 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             res = 0;
         }
         unsigned int bufflen = len - res;
-        unsigned char *buff = (unsigned char*)smalloc(epoll->bufflen);
+        unsigned char *buff = (unsigned char*)smalloc(bufflen);
         if (buff == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+            Epoll_Delete(epoll);
             return;
         }
-        memcpy(buff, data + res, epoll->bufflen);
+        memcpy(buff, data + res, bufflen);
         epoll->buff = buff;
         epoll->bufflen = bufflen;
         epoll->writeenable = 0;
@@ -226,6 +226,7 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
         unsigned char *buff = (unsigned char*)smalloc(bufflen);
         if (buff == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+            Epoll_Delete(epoll);
             return;
         }
         if (epoll->bufflen) {

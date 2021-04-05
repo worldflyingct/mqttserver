@@ -4,8 +4,11 @@
 static int malloc_num = 0;
 
 void* smalloc (unsigned int size) {
-    ++malloc_num;
-    return malloc(size);
+    void *ptr = malloc(size);
+    if (ptr != NULL) {
+        ++malloc_num;
+    }
+    return ptr;
 }
 
 void sfree (void *ptr) {

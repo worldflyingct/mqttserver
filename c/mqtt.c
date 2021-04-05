@@ -239,6 +239,19 @@ static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned int *
 
 void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long len) {
     if (epoll->mqttpackagelen) {
+        if (epoll->mqttuselen + len > epoll->mqttpackagecap) {
+            unsigned int packagecap = epoll->mqttuselen + len;
+            unsigned char *package = (unsigned char*)smalloc(packagecap);
+            if (package == NULL) {
+                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                Epoll_Delete(epoll);
+                return;
+            }
+            memcpy(package, epoll->mqttpackage, epoll->mqttuselen);
+            sfree(epoll->mqttpackage);
+            epoll->mqttpackage = package;
+            epoll->mqttpackagecap = packagecap;
+        }
         memcpy(epoll->mqttpackage + epoll->mqttuselen, buff, len);
         epoll->mqttuselen += len;
         if (epoll->mqttuselen < epoll->mqttpackagelen) {
@@ -246,9 +259,10 @@ void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long l
         }
         memcpy(buff, epoll->mqttpackage, epoll->mqttuselen);
         len = epoll->mqttuselen;
-        epoll->mqttuselen = 0;
-        epoll->mqttpackagelen = 0;
         sfree(epoll->mqttpackage);
+        epoll->mqttpackagecap = 0;
+        epoll->mqttpackagelen = 0;
+        epoll->mqttuselen = 0;
     }
     unsigned int packagelen;
     unsigned int offset;
@@ -258,7 +272,7 @@ LOOP:
         return;
     }
     if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-        unsigned char *package = (unsigned char*)smalloc(2*packagelen);
+        unsigned char *package = (unsigned char*)smalloc(packagelen);
         if (package == NULL) {
             printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
@@ -266,6 +280,7 @@ LOOP:
         }
         memcpy(package, buff, len);
         epoll->mqttpackage = package;
+        epoll->mqttpackagecap = packagelen;
         epoll->mqttpackagelen = packagelen;
         epoll->mqttuselen = len;
         return;
@@ -469,8 +484,14 @@ LOOP:
             return;
         }
         unsigned short protnamelen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        offset += 2;
+        if (packagelen < offset + protnamelen) {
+            printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+            Epoll_Delete(epoll);
+            return;
+        }
         // 这里可以读一下protname。
-        offset += 2 + protnamelen;
+        offset += protnamelen;
         if (packagelen < offset + 1) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);

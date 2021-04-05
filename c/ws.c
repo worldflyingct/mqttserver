@@ -78,6 +78,19 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
     } else if (epoll->wsstate) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         if (epoll->wspackagelen) {
+            if (epoll->wsuselen + len > epoll->wspackagecap) {
+                unsigned int packagecap = epoll->wsuselen + len;
+                unsigned char *package = (unsigned char*)smalloc(packagecap);
+                if (package == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                memcpy(package, epoll->wspackage, epoll->wsuselen);
+                sfree(epoll->wspackage);
+                epoll->wspackage = package;
+                epoll->wspackagecap = packagecap;
+            }
             memcpy(epoll->wspackage + epoll->wsuselen, buff, len);
             epoll->wsuselen += len;
             if (epoll->wsuselen < epoll->wspackagelen) {
@@ -85,9 +98,10 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             }
             memcpy(buff, epoll->wspackage, epoll->wsuselen);
             len = epoll->wsuselen;
-            epoll->wsuselen = 0;
-            epoll->wspackagelen = 0;
             sfree(epoll->wspackage);
+            epoll->wspackagecap = 0;
+            epoll->wspackagelen = 0;
+            epoll->wsuselen = 0;
         }
         unsigned char *mask;
         unsigned char *data;
@@ -152,13 +166,15 @@ LOOP:
             }
         }
         if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-            epoll->wspackage = (unsigned char*)malloc(2*packagelen);
-            if (epoll->wspackage == NULL) {
+            unsigned char *package = (unsigned char*)smalloc(packagelen);
+            if (package == NULL) {
                 printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
-            memcpy(epoll->wspackage, buff, len);
+            memcpy(package, buff, len);
+            epoll->wspackage = package;
+            epoll->wspackagecap = packagelen;
             epoll->wspackagelen = packagelen;
             epoll->wsuselen = len;
             return;
@@ -203,17 +219,31 @@ LOOP:
         int k, p, headlen;
         unsigned long packagelen;
         if (epoll->httphead != NULL) {
+            if (epoll->wsuselen + len > epoll->wspackagecap) {
+                unsigned int packagecap = epoll->wsuselen + len;
+                unsigned char *package = (unsigned char*)smalloc(packagecap);
+                if (package == NULL) {
+                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                memcpy(package, epoll->wspackage, epoll->wsuselen);
+                sfree(epoll->wspackage);
+                epoll->wspackage = package;
+                epoll->wspackagecap = packagecap;
+            }
             memcpy(epoll->wspackage + epoll->wspackagelen, buff, len);
-            packagelen = epoll->wspackagelen;
             epoll->wsuselen += len;
             if (epoll->wsuselen < epoll->wspackagelen) {
                 return;
             }
+            packagelen = epoll->wspackagelen;
             memcpy(buff, epoll->wspackage, epoll->wsuselen);
             len = epoll->wsuselen;
-            epoll->wsuselen = 0;
-            epoll->wspackagelen = 0;
             sfree(epoll->wspackage);
+            epoll->wspackagecap = 0;
+            epoll->wspackagelen = 0;
+            epoll->wsuselen = 0;
             method = epoll->httphead->httpmethod;
             path = epoll->httphead->httppath;
             version = epoll->httphead->httpversion;
@@ -263,6 +293,7 @@ LOOP:
                 memcpy(wspackage, buff, len);
                 epoll->wspackage = wspackage;
                 epoll->wspackagelen = packagelen;
+                epoll->wspackagecap = packagelen;
                 epoll->wsuselen = len;
                 struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD));
                 if (httphead == NULL) {
@@ -352,7 +383,7 @@ LOOP:
                 Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
                 Epoll_Delete(epoll);
             }
-        } else if (!strcmp(method, "POST")) { // restful请求发送消息，过几天再完成它。
+        } else if (!strcmp(method, "POST")) {
             Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
             Epoll_Delete(epoll);
         } else {
