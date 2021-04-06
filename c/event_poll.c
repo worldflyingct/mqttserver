@@ -86,7 +86,7 @@ void Epoll_Delete (EPOLL *epoll) {
     close(epoll->fd);
     epoll->fd = 0;
     if (epoll->mqttstate) {
-        DeleteMqttClient(epoll, buffer);
+        DeleteMqttClient(epoll);
     }
     if (epoll->bufflen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);

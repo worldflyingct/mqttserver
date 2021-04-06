@@ -106,7 +106,7 @@ void ShowTopics () {
     }
 }
 
-static void SendToClient (unsigned char *buff, unsigned int packagelen, unsigned char *topic, unsigned short topiclen) {
+static void SendToClient (unsigned char *package, unsigned int packagelen, unsigned char *topic, unsigned short topiclen) {
     struct TopicList *topiclist = topiclisthead;
     while (topiclist != NULL) {
         if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
@@ -118,13 +118,13 @@ static void SendToClient (unsigned char *buff, unsigned int packagelen, unsigned
         struct TopicToEpoll *tte = topiclist->tte;
         while (tte != NULL) {
             EPOLL *epoll = tte->epoll;
-            epoll->write(epoll, buff, packagelen);
+            epoll->write(epoll, package, packagelen);
             tte = tte->tail;
         }
     }
 }
 
-void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen, unsigned char *buff) {
+void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen) {
     unsigned int len = 2 + topiclen + msglen;
     unsigned int packagelen;
     unsigned int offset;
@@ -141,21 +141,22 @@ void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *
         packagelen = len + 5;
         offset = 5;
     }
+    char package[packagelen];
     unsigned char n = 0;
     while (len > 0) {
-        buff[n] |= 0x80;
+        package[n] |= 0x80;
         ++n;
-        buff[n] = len & 0x7f;
+        package[n] = len & 0x7f;
         len >>= 7;
     }
-    buff[0] = PUBLISH;
-    buff[offset] = topiclen >> 8;
-    buff[offset+1] = topiclen;
+    package[0] = PUBLISH;
+    package[offset] = topiclen >> 8;
+    package[offset+1] = topiclen;
     offset += 2;
-    memcpy(buff + offset, topic, topiclen);
+    memcpy(package + offset, topic, topiclen);
     offset += topiclen;
-    memcpy(buff + offset, msg, msglen);
-    SendToClient(buff, packagelen, topic, topiclen);
+    memcpy(package + offset, msg, msglen);
+    SendToClient(package, packagelen, topic, topiclen);
 }
 
 static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
@@ -201,7 +202,7 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
     }
 }
 
-void DeleteMqttClient (EPOLL *epoll, unsigned char *buff) {
+void DeleteMqttClient (EPOLL *epoll) {
     struct SubScribeList *sbbl = epoll->sbbl;
     while (sbbl != NULL) {
         struct SubScribeList *next = sbbl->tail;
@@ -217,7 +218,7 @@ void DeleteMqttClient (EPOLL *epoll, unsigned char *buff) {
         epoll->tail->head = epoll->head;
     }
     if (epoll->mqttwilltopiclen > 0 && epoll->mqttwillmsglen > 0) {
-        PublishData(epoll->mqttwilltopic, epoll->mqttwilltopiclen, epoll->mqttwillmsg, epoll->mqttwillmsglen, buff);
+        PublishData(epoll->mqttwilltopic, epoll->mqttwilltopiclen, epoll->mqttwillmsg, epoll->mqttwillmsglen);
     }
 }
 
@@ -237,18 +238,18 @@ static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned int *
                 return -3;
             }
             if ((buff[3] & 0x80) != 0x00) {
-                *packagelen = 128 * 128 * 128 * (unsigned int)buff[4] + 128 * 128 * (unsigned int)(buff[3] & 0x7f) + 128 * (unsigned int)(buff[2] & 0x7f) + (unsigned int)(buff[1] & 0x7f) + 5;
+                *packagelen = (((unsigned int)(buff[4] & 0x7f) << 21) | ((unsigned int)(buff[3] & 0x7f) << 14) | ((unsigned int)(buff[2] & 0x7f) << 7) | (unsigned int)(buff[1] & 0x7f)) + 5;
                 *offset = 5;
             } else {
-                *packagelen = 128 * 128 * (unsigned int)buff[3] + 128 * (unsigned int)(buff[2] & 0x7f) + (unsigned int)(buff[1] & 0x7f) + 4;
+                *packagelen = (((unsigned int)(buff[3] & 0x7f) << 14) | ((unsigned int)(buff[2] & 0x7f) << 7) | (unsigned int)(buff[1] & 0x7f)) + 4;
                 *offset = 4;
             }
         } else {
-            *packagelen = 128 * (unsigned int)buff[2] + (unsigned int)(buff[1] & 0x7f) + 3;
+            *packagelen = (((unsigned int)(buff[2] & 0x7f) << 7) | (unsigned int)(buff[1] & 0x7f)) + 3;
             *offset = 3;
         }
     } else {
-        *packagelen = (unsigned int)buff[1] + 2;
+        *packagelen = (unsigned int)(buff[1] & 0x7f) + 2;
         *offset = 2;
     }
     return 0;
