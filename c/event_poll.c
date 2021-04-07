@@ -7,6 +7,7 @@
 #include "event_poll.h"
 #include "mqtt.h"
 #include "smalloc.h"
+#include "config.h"
 
 #define MAXEVENTS      2048
 
@@ -23,14 +24,15 @@ EPOLL *add_fd_to_poll (int fd, int opt) {
         int fdflags = fcntl(fd, F_GETFL, 0);
         fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
 
+        struct ConfigData *configdata = InitConfig();
         int keepAlive = 1;    // 非0值，开启keepalive属性
-        int keepIdle = 6;    // 如该连接在6秒内没有任何数据往来,则进行此TCP层的探测
-        int keepInterval = 1; // 探测发包间隔为1秒
-        int keepCount = 3;        // 尝试探测的最多3次数
-        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepAlive, sizeof(keepAlive));
+        int keepIdle = configdata->tcpkeepidle;    // 如该连接在6秒内没有任何数据往来,则进行此TCP层的探测
+        int keepInterval = configdata->tcpkeepinterval; // 探测发包间隔为1秒
+        int keepCount = configdata->tcpkeepcount;        // 尝试探测的最多3次数
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void*)&keepAlive, sizeof(keepAlive));
         setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, (void*)&keepIdle, sizeof(keepIdle));
-        setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keepInterval, sizeof(keepInterval));
-        setsockopt(fd, SOL_TCP, TCP_KEEPCNT, (void *)&keepCount, sizeof(keepCount));
+        setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, (void*)&keepInterval, sizeof(keepInterval));
+        setsockopt(fd, SOL_TCP, TCP_KEEPCNT, (void*)&keepCount, sizeof(keepCount));
     }
 
     EPOLL *epoll = (EPOLL*)smalloc(sizeof(EPOLL));

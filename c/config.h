@@ -13,6 +13,9 @@ struct ConfigData {
     unsigned char mqttuser[33];
     unsigned char mqttkey[33];
     SSL_CTX *ctx;
+    unsigned char tcpkeepidle;
+    unsigned char tcpkeepinterval;
+    unsigned char tcpkeepcount;
 };
 
 struct ConfigData* InitConfig ();

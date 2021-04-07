@@ -16,7 +16,7 @@ ws.o: ws.c event_poll.h mqtt.h config.h sha1.h base64.h smalloc.h
 tcp.o: tcp.c event_poll.h mqtt.h config.h
 	$(CC) $(CFLAGS) -c -o $@ tcp.c
 
-event_poll.o: event_poll.c event_poll.h mqtt.h smalloc.h
+event_poll.o: event_poll.c event_poll.h mqtt.h smalloc.h config.h
 	$(CC) $(CFLAGS) -c -o $@ event_poll.c
 
 config.o: config.c config.h cJSON.h
