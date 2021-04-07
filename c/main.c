@@ -20,15 +20,15 @@ int main () {
         SSL_load_error_strings();
         SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
         if (!SSL_CTX_use_certificate_file(ctx, configdata->crtpath, SSL_FILETYPE_PEM)) {
-            printf("in %s, at %d\n", __FILE__, __LINE__);
+            printf("SSL use certificate file error, in %s, at %d\n", __FILE__, __LINE__);
             return -3;
         }
         if (!SSL_CTX_use_PrivateKey_file(ctx, configdata->keypath, SSL_FILETYPE_PEM) ) {
-            printf("in %s, at %d\n", __FILE__, __LINE__);
+            printf("SSL use PrivateKey file error, in %s, at %d\n", __FILE__, __LINE__);
             return -4;
         }
         if (!SSL_CTX_check_private_key(ctx)) {
-            printf("in %s, at %d\n", __FILE__, __LINE__);
+            printf("SSL check private key error, in %s, at %d\n", __FILE__, __LINE__);
             return -5;
         }
         configdata->ctx = ctx;

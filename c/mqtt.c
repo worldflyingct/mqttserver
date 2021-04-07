@@ -361,67 +361,68 @@ LOOP:
                     return;
                 }
                 offset += 1;
-                struct TopicList *topiclist = topiclisthead;
-                while (topiclist != NULL) {
-                    if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
-                        break;
-                    }
-                    topiclist = topiclist->tail;
-                }
-                if (topiclist == NULL) {
-                    topiclist = (struct TopicList*)smalloc(sizeof(struct TopicList));
-                    if (topiclist == NULL) {
-                        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                        Epoll_Delete(epoll);
-                        return;
-                    }
-                    unsigned char *t = (unsigned char*)smalloc(topiclen);
-                    if (t == NULL) {
-                        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                        Epoll_Delete(epoll);
-                        return;
-                    }
-                    memcpy(t, topic, topiclen);
-                    topiclist->topic = t;
-                    topiclist->topiclen = topiclen;
-                    topiclist->tte = NULL;
-                    topiclist->head = NULL;
-                    topiclist->tail = topiclisthead;
-                    if (topiclisthead) {
-                        topiclisthead->head = topiclist;
-                    }
-                    topiclisthead = topiclist;
-                }
-                struct TopicToEpoll *tte = topiclist->tte;
-                while (tte != NULL) {
-                    if (tte->epoll == epoll) {
-                        break;
-                    }
-                    tte = tte->tail;
-                }
-                if (tte == NULL) {
-                    tte = (struct TopicToEpoll*)smalloc(sizeof(struct TopicToEpoll));
-                    if (tte == NULL) {
-                        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
-                        Epoll_Delete(epoll);
-                        return;
-                    }
-                    tte->epoll = epoll;
-                    tte->head = NULL;
-                    tte->tail = topiclist->tte;
-                    if (topiclist->tte) {
-                        topiclist->tte->head = tte;
-                    }
-                    topiclist->tte = tte;
-                }
                 struct SubScribeList *sbbl = epoll->sbbl;
                 while (sbbl != NULL) {
-                    if (sbbl->topiclist == topiclist) {
+                    struct TopicList *topiclist = sbbl->topiclist;
+                    if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
                         break;
                     }
                     sbbl = sbbl->tail;
                 }
                 if (sbbl == NULL) {
+                    struct TopicList *topiclist = topiclisthead;
+                    while (topiclist != NULL) {
+                        if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
+                            break;
+                        }
+                        topiclist = topiclist->tail;
+                    }
+                    if (topiclist == NULL) {
+                        topiclist = (struct TopicList*)smalloc(sizeof(struct TopicList));
+                        if (topiclist == NULL) {
+                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                            Epoll_Delete(epoll);
+                            return;
+                        }
+                        unsigned char *t = (unsigned char*)smalloc(topiclen);
+                        if (t == NULL) {
+                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                            Epoll_Delete(epoll);
+                            return;
+                        }
+                        memcpy(t, topic, topiclen);
+                        topiclist->topic = t;
+                        topiclist->topiclen = topiclen;
+                        topiclist->tte = NULL;
+                        topiclist->head = NULL;
+                        topiclist->tail = topiclisthead;
+                        if (topiclisthead) {
+                            topiclisthead->head = topiclist;
+                        }
+                        topiclisthead = topiclist;
+                    }
+                    struct TopicToEpoll *tte = topiclist->tte;
+                    while (tte != NULL) {
+                        if (tte->epoll == epoll) {
+                            break;
+                        }
+                        tte = tte->tail;
+                    }
+                    if (tte == NULL) {
+                        tte = (struct TopicToEpoll*)smalloc(sizeof(struct TopicToEpoll));
+                        if (tte == NULL) {
+                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
+                            Epoll_Delete(epoll);
+                            return;
+                        }
+                        tte->epoll = epoll;
+                        tte->head = NULL;
+                        tte->tail = topiclist->tte;
+                        if (topiclist->tte) {
+                            topiclist->tte->head = tte;
+                        }
+                        topiclist->tte = tte;
+                    }
                     sbbl = (struct SubScribeList*)smalloc(sizeof(struct SubScribeList));
                     if (sbbl == NULL) {
                         printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
