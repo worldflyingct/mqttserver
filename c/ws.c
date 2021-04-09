@@ -12,6 +12,7 @@
 
 #define ERRORPAGE       "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nContent-Length: 84\r\nConnection: close\r\n\r\n<html><head><title>400 Bad Request</title></head><body>400 Bad Request</body></html>"
 #define SUCCESSMSG      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\nSec-WebSocket-Protocol: %s\r\n\r\n"
+#define SUCESSNOPROT    "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n"
 #define SUCCESSPAGE     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 77\r\nConnection: close\r\n\r\n<html><head><title>Request Success</title></head><body>Success.</body></html>"
 #define HTTPOKHEAD      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
 #define PAGE500         "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: 104\r\nConnection: close\r\n\r\n<html><head><title>500 Internal Server Error</title></head><body>500 Internal Server Error</body></html>"
@@ -340,7 +341,12 @@ LOOP:
                 base64_encode(output, 20, base64, &base64_len);
                 base64[base64_len] = '\0';
                 char s[256];
-                int res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
+                int res_len;
+                if (p != -1) {
+                    res_len = sprintf(s, SUCCESSMSG, base64, httpparam[p].value);
+                } else {
+                    res_len = sprintf(s, SUCESSNOPROT, base64);
+                }
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
             } else if (!strcmp(path, "/getclientsnum")) {
