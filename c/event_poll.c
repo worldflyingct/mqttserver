@@ -19,11 +19,10 @@ static struct epoll_event evs[MAXEVENTS];
 EPOLL *remainepollhead = NULL;
 
 EPOLL *add_fd_to_poll (int fd, int opt) {
+    // 设置为非阻塞
+    int fdflags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
     if (opt) {
-        // 设置为非阻塞
-        int fdflags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, fdflags | O_NONBLOCK);
-
         struct ConfigData *configdata = InitConfig();
         int keepAlive = 1;    // 非0值，开启keepalive属性
         int keepIdle = configdata->tcpkeepidle;    // 如该连接在6秒内没有任何数据往来,则进行此TCP层的探测

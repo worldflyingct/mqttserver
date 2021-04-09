@@ -73,7 +73,7 @@ int Tcp_Create () {
             close(fd);
             return -2;
         }
-        if (listen(fd, 16) < 0) {
+        if (listen(fd, 32) < 0) {
             printf("listen port %d fail, in %s, at %d\n", configdata->tcpport, __FILE__, __LINE__);
             close(fd);
             return -3;
@@ -104,7 +104,7 @@ int Tcp_Create () {
             close(fd);
             return -6;
         }
-        if (listen(fd, 16) < 0) {
+        if (listen(fd, 32) < 0) {
             printf("listen port %d fail, in %s, at %d\n", configdata->tlsport, __FILE__, __LINE__);
             close(fd);
             return -7;
