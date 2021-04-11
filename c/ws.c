@@ -82,14 +82,13 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
         if (epoll->wspackagelen) {
             if (epoll->wsuselen + len > epoll->wspackagecap) {
                 unsigned int packagecap = epoll->wsuselen + len;
-                unsigned char *package = (unsigned char*)smalloc(packagecap);
+                unsigned char *package = (unsigned char*)smalloc(packagecap, __FILE__, __LINE__);
                 if (package == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                     return;
                 }
                 memcpy(package, epoll->wspackage, epoll->wsuselen);
-                sfree(epoll->wspackage);
+                sfree(epoll->wspackage, __FILE__, __LINE__);
                 epoll->wspackage = package;
                 epoll->wspackagecap = packagecap;
             }
@@ -100,7 +99,7 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             }
             memcpy(buff, epoll->wspackage, epoll->wsuselen);
             len = epoll->wsuselen;
-            sfree(epoll->wspackage);
+            sfree(epoll->wspackage, __FILE__, __LINE__);
             epoll->wspackagecap = 0;
             epoll->wspackagelen = 0;
             epoll->wsuselen = 0;
@@ -168,9 +167,8 @@ LOOP:
             }
         }
         if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-            unsigned char *package = (unsigned char*)smalloc(packagelen);
+            unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
             if (package == NULL) {
-                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
@@ -223,14 +221,13 @@ LOOP:
         if (epoll->httphead != NULL) {
             if (epoll->wsuselen + len > epoll->wspackagecap) {
                 unsigned int packagecap = epoll->wsuselen + len;
-                unsigned char *package = (unsigned char*)smalloc(packagecap);
+                unsigned char *package = (unsigned char*)smalloc(packagecap, __FILE__, __LINE__);
                 if (package == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                     return;
                 }
                 memcpy(package, epoll->wspackage, epoll->wsuselen);
-                sfree(epoll->wspackage);
+                sfree(epoll->wspackage, __FILE__, __LINE__);
                 epoll->wspackage = package;
                 epoll->wspackagecap = packagecap;
             }
@@ -242,7 +239,7 @@ LOOP:
             packagelen = epoll->wspackagelen;
             memcpy(buff, epoll->wspackage, epoll->wsuselen);
             len = epoll->wsuselen;
-            sfree(epoll->wspackage);
+            sfree(epoll->wspackage, __FILE__, __LINE__);
             epoll->wspackagecap = 0;
             epoll->wspackagelen = 0;
             epoll->wsuselen = 0;
@@ -254,7 +251,7 @@ LOOP:
             p = epoll->httphead->p;
             k = epoll->httphead->k;
             headlen = epoll->httphead->headlen;
-            sfree(epoll->httphead);
+            sfree(epoll->httphead, __FILE__, __LINE__);
             epoll->httphead = NULL;
         } else {
             size = 30;
@@ -285,9 +282,8 @@ LOOP:
                 }
             }
             if (packagelen > len) {
-                unsigned char *wspackage = (unsigned char*)smalloc(packagelen);
+                unsigned char *wspackage = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
                 if (wspackage == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Write(epoll, PAGE500, sizeof(PAGE500));
                     Epoll_Delete(epoll);
                     return;
@@ -297,9 +293,8 @@ LOOP:
                 epoll->wspackagelen = packagelen;
                 epoll->wspackagecap = packagelen;
                 epoll->wsuselen = len;
-                struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD));
+                struct HTTPHEAD *httphead = (struct HTTPHEAD*)smalloc(sizeof(struct HTTPHEAD), __FILE__, __LINE__);
                 if (httphead == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Write(epoll, PAGE500, sizeof(PAGE500));
                     Epoll_Delete(epoll);
                     return;

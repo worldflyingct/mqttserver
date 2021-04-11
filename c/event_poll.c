@@ -34,9 +34,8 @@ EPOLL *add_fd_to_poll (int fd, int opt) {
         setsockopt(fd, SOL_TCP, TCP_KEEPCNT, (void*)&keepCount, sizeof(keepCount));
     }
 
-    EPOLL *epoll = (EPOLL*)smalloc(sizeof(EPOLL));
+    EPOLL *epoll = (EPOLL*)smalloc(sizeof(EPOLL), __FILE__, __LINE__);
     if (epoll == NULL) {
-        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
         return NULL;
     }
     memset(epoll, 0, sizeof(EPOLL));
@@ -47,7 +46,7 @@ EPOLL *add_fd_to_poll (int fd, int opt) {
     ev.data.ptr = epoll;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev)) {
         printf("add fd:%d to poll, in %s, at %d\n", fd, __FILE__, __LINE__);
-        sfree(epoll);
+        sfree(epoll, __FILE__, __LINE__);
         return NULL;
     }
     return epoll;
@@ -91,35 +90,35 @@ void Epoll_Delete (EPOLL *epoll) {
     }
     if (epoll->bufflen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->buff);
+        sfree(epoll->buff, __FILE__, __LINE__);
     }
     if (epoll->mqttpackagecap) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->mqttpackage);
+        sfree(epoll->mqttpackage, __FILE__, __LINE__);
     }
     if (epoll->clientidlen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->clientid);
+        sfree(epoll->clientid, __FILE__, __LINE__);
     }
     if (epoll->mqttwilltopiclen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->mqttwilltopic);
+        sfree(epoll->mqttwilltopic, __FILE__, __LINE__);
     }
     if (epoll->mqttwillmsglen) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->mqttwillmsg);
+        sfree(epoll->mqttwillmsg, __FILE__, __LINE__);
     }
     if (epoll->httphead) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->httphead);
+        sfree(epoll->httphead, __FILE__, __LINE__);
     }
     if (epoll->wspackagecap) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        sfree(epoll->wspackage);
+        sfree(epoll->wspackage, __FILE__, __LINE__);
     }
     if (epoll->tls) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
-        SSL_shutdown(epoll->tls);
+        // SSL_shutdown(epoll->tls);
         SSL_free(epoll->tls);
     }
     epoll->tail = remainepollhead;
@@ -161,20 +160,19 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 res = write(epoll->fd, epoll->buff, epoll->bufflen);
             }
             if (res == epoll->bufflen) {
-                sfree(epoll->buff);
+                sfree(epoll->buff, __FILE__, __LINE__);
                 epoll->bufflen = 0;
                 epoll->writeenable = 1;
                 mod_fd_at_poll(epoll, 0);
             } else if (res > 0) {
                 unsigned int bufflen = epoll->bufflen - res;
-                unsigned char *buff = (unsigned char*)smalloc(bufflen);
+                unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
                 if (buff == NULL) {
-                    printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                     return;
                 }
                 memcpy(buff, epoll->buff + res, bufflen);
-                sfree(epoll->buff);
+                sfree(epoll->buff, __FILE__, __LINE__);
                 epoll->buff = buff;
                 epoll->bufflen = bufflen;
             } else if (res < 0) {
@@ -213,9 +211,8 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             res = 0;
         }
         unsigned int bufflen = len - res;
-        unsigned char *buff = (unsigned char*)smalloc(bufflen);
+        unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
         if (buff == NULL) {
-            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return;
         }
@@ -228,15 +225,14 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
         }
     } else {
         unsigned int bufflen = epoll->bufflen + len;
-        unsigned char *buff = (unsigned char*)smalloc(bufflen);
+        unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
         if (buff == NULL) {
-            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return;
         }
         if (epoll->bufflen) {
             memcpy(buff, epoll->buff, epoll->bufflen);
-            sfree(epoll->buff);
+            sfree(epoll->buff, __FILE__, __LINE__);
         }
         memcpy(buff + epoll->bufflen, data, len);
         epoll->buff = buff;
@@ -268,7 +264,7 @@ LOOP:
     while (remainepollhead != NULL) {
         EPOLL *epoll = remainepollhead;
         remainepollhead = remainepollhead->tail;
-        sfree(epoll);
+        sfree(epoll, __FILE__, __LINE__);
     }
     goto LOOP;
 }

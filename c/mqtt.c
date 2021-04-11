@@ -169,7 +169,7 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
         sbbl->tail->head = sbbl->head;
     }
     struct TopicList *topiclist = sbbl->topiclist;
-    sfree(sbbl);
+    sfree(sbbl, __FILE__, __LINE__);
     struct TopicToEpoll *tte = topiclist->tte;
     while (tte != NULL) {
         if (tte->epoll == epoll) {
@@ -186,7 +186,7 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
         if (tte->tail) {
             tte->tail->head = tte->head;
         }
-        sfree(tte);
+        sfree(tte, __FILE__, __LINE__);
     }
     if (topiclist->tte == NULL) {
         if (topiclist->head) {
@@ -197,8 +197,8 @@ static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
         if (topiclist->tail) {
             topiclist->tail->head = topiclist->head;
         }
-        sfree(topiclist->topic);
-        sfree(topiclist);
+        sfree(topiclist->topic, __FILE__, __LINE__);
+        sfree(topiclist, __FILE__, __LINE__);
     }
 }
 
@@ -259,14 +259,13 @@ void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long l
     if (epoll->mqttpackagelen) {
         if (epoll->mqttuselen + len > epoll->mqttpackagecap) {
             unsigned int packagecap = epoll->mqttuselen + len;
-            unsigned char *package = (unsigned char*)smalloc(packagecap);
+            unsigned char *package = (unsigned char*)smalloc(packagecap, __FILE__, __LINE__);
             if (package == NULL) {
-                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
             memcpy(package, epoll->mqttpackage, epoll->mqttuselen);
-            sfree(epoll->mqttpackage);
+            sfree(epoll->mqttpackage, __FILE__, __LINE__);
             epoll->mqttpackage = package;
             epoll->mqttpackagecap = packagecap;
         }
@@ -277,7 +276,7 @@ void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long l
         }
         memcpy(buff, epoll->mqttpackage, epoll->mqttuselen);
         len = epoll->mqttuselen;
-        sfree(epoll->mqttpackage);
+        sfree(epoll->mqttpackage, __FILE__, __LINE__);
         epoll->mqttpackagecap = 0;
         epoll->mqttpackagelen = 0;
         epoll->mqttuselen = 0;
@@ -290,9 +289,8 @@ LOOP:
         return;
     }
     if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-        unsigned char *package = (unsigned char*)smalloc(packagelen);
+        unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
         if (package == NULL) {
-            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return;
         }
@@ -378,15 +376,13 @@ LOOP:
                         topiclist = topiclist->tail;
                     }
                     if (topiclist == NULL) {
-                        topiclist = (struct TopicList*)smalloc(sizeof(struct TopicList));
+                        topiclist = (struct TopicList*)smalloc(sizeof(struct TopicList), __FILE__, __LINE__);
                         if (topiclist == NULL) {
-                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                             Epoll_Delete(epoll);
                             return;
                         }
-                        unsigned char *t = (unsigned char*)smalloc(topiclen);
+                        unsigned char *t = (unsigned char*)smalloc(topiclen, __FILE__, __LINE__);
                         if (t == NULL) {
-                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                             Epoll_Delete(epoll);
                             return;
                         }
@@ -409,9 +405,8 @@ LOOP:
                         tte = tte->tail;
                     }
                     if (tte == NULL) {
-                        tte = (struct TopicToEpoll*)smalloc(sizeof(struct TopicToEpoll));
+                        tte = (struct TopicToEpoll*)smalloc(sizeof(struct TopicToEpoll), __FILE__, __LINE__);
                         if (tte == NULL) {
-                            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                             Epoll_Delete(epoll);
                             return;
                         }
@@ -423,9 +418,8 @@ LOOP:
                         }
                         topiclist->tte = tte;
                     }
-                    sbbl = (struct SubScribeList*)smalloc(sizeof(struct SubScribeList));
+                    sbbl = (struct SubScribeList*)smalloc(sizeof(struct SubScribeList), __FILE__, __LINE__);
                     if (sbbl == NULL) {
-                        printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                         Epoll_Delete(epoll);
                         return;
                     }
@@ -584,9 +578,8 @@ LOOP:
                 return;
             }
             unsigned char *willtopic = buff + offset;
-            unsigned char *wt = (unsigned char*)smalloc(willtopiclen * sizeof(unsigned char));
+            unsigned char *wt = (unsigned char*)smalloc(willtopiclen * sizeof(unsigned char), __FILE__, __LINE__);
             if (wt == NULL) {
-                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
@@ -607,9 +600,8 @@ LOOP:
                 return;
             }
             unsigned char *willmsg = buff + offset;
-            unsigned char *wm = (unsigned char*)smalloc(willmsglen * sizeof(unsigned char));
+            unsigned char *wm = (unsigned char*)smalloc(willmsglen * sizeof(unsigned char), __FILE__, __LINE__);
             if (wm == NULL) {
-                printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
@@ -728,9 +720,8 @@ LOOP:
             }
             e = e->tail;
         }
-        unsigned char *cid = (unsigned char*)smalloc(clientidlen);
+        unsigned char *cid = (unsigned char*)smalloc(clientidlen, __FILE__, __LINE__);
         if (cid == NULL) {
-            printf("malloc fail, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return;
         }
