@@ -3,8 +3,13 @@
 #include "event_poll.h"
 #include "ws.h"
 #include "tcp.h"
+#include "smalloc.h"
 
 int main () {
+    if (setmemcheck()) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
+        return -1;
+    }
     struct ConfigData *configdata = InitConfig();
     if (!configdata) {
         printf("in %s, at %d\n", __FILE__, __LINE__);

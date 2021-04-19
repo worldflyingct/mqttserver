@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <mcheck.h>
 
 static int malloc_num = 0;
 
 void* smalloc (unsigned int size, char *filename, unsigned int line) {
-    // printf("malloc, size: %u, in %s, at %d\n", size, filename, line);
+    printf("malloc, size: %u, in %s, at %d\n", size, filename, line);
     if (size == 0) {
         printf("malloc fail, size: %u, in %s, at %d\n", size, filename, line);
         return NULL;
@@ -19,7 +20,7 @@ void* smalloc (unsigned int size, char *filename, unsigned int line) {
 }
 
 void sfree (void *ptr, char *filename, unsigned int line) {
-    // printf("free, in %s, at %d\n", filename, line);
+    printf("free, in %s, at %d\n", filename, line);
     if (ptr == NULL) {
         printf("ptr is NULL, in %s, at %d\n", filename, line);
         return;
@@ -30,4 +31,21 @@ void sfree (void *ptr, char *filename, unsigned int line) {
 
 int GetMallocNum () {
     return malloc_num;
+}
+
+void abortfun(enum mcheck_status mstatus) {
+    switch(mstatus) {
+        case MCHECK_FREE: printf("[abortfun]Block freed twice.\n");break;
+        case MCHECK_HEAD: printf("[abortfun]Memory before the block was clobbered.\n");break;
+        case MCHECK_TAIL: printf("[abortfun]Memory after the block was clobbered.\n");break;
+        default: printf("[abortfun]Block is fine.\n");break;
+    }
+}
+
+int setmemcheck () {
+    int res = mcheck(abortfun);
+    if (res != 0) {
+        printf("set mem check fail.");
+    }
+    return res;
 }
