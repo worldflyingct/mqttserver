@@ -231,7 +231,7 @@ LOOP:
                 epoll->wspackage = package;
                 epoll->wspackagecap = packagecap;
             }
-            memcpy(epoll->wspackage + epoll->wspackagelen, buff, len);
+            memcpy(epoll->wspackage + epoll->wsuselen, buff, len);
             epoll->wsuselen += len;
             if (epoll->wsuselen < epoll->wspackagelen) {
                 return;
@@ -246,7 +246,7 @@ LOOP:
             method = epoll->httphead->httpmethod;
             path = epoll->httphead->httppath;
             version = epoll->httphead->httpversion;
-            memcpy(httpparam, epoll->httphead->httpparam, epoll->httphead->httpparam_size);
+            memcpy(httpparam, epoll->httphead->httpparam, epoll->httphead->httpparam_size*sizeof(struct HTTPPARAM));
             size = epoll->httphead->httpparam_size;
             p = epoll->httphead->p;
             k = epoll->httphead->k;
@@ -302,7 +302,7 @@ LOOP:
                 httphead->httpmethod = method;
                 httphead->httppath = path;
                 httphead->httpversion = version;
-                memcpy(httphead->httpparam, httpparam, size);
+                memcpy(httphead->httpparam, httpparam, size*sizeof(struct HTTPPARAM));
                 httphead->httpparam_size = size;
                 httphead->p = p;
                 httphead->k = k;
@@ -547,8 +547,7 @@ static int ParseHttpHeader (char* str,
                 if ((str[i-3] == '\0' || str[i-3] == '\r') && str[i-2] == '\n' && str[i-1] == '\r' && str[i] == '\n') { // 正常退出处
                     *httpparam_size = httpParamNum;
                     return i;
-                }
-                if (str[i] != ' ' && str[i] != '\r' && str[i] != '\n') {
+                } else if (str[i] != ' ' && str[i] != '\r' && str[i] != '\n') {
                     if (httpParamNum == maxHttpParamNum) {
                         return -1;
                     }
@@ -568,7 +567,7 @@ static int ParseHttpHeader (char* str,
                     ++step;
                 }
                 break;
-            case 10: // 寻找PARAMKEY结束
+            case 10: // 寻找PARAMVALUE结束
                 if (str[i-1] == '\r' && str[i] == '\n') {
                     str[i-1] = '\0';
                     ++httpParamNum;
