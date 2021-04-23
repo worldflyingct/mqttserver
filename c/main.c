@@ -6,10 +6,12 @@
 #include "smalloc.h"
 
 int main () {
+#ifdef DEBUG
     if (setmemcheck()) {
         printf("in %s, at %d\n", __FILE__, __LINE__);
-        return -1;
+        return -999;
     }
+#endif
     struct ConfigData *configdata = InitConfig();
     if (!configdata) {
         printf("in %s, at %d\n", __FILE__, __LINE__);

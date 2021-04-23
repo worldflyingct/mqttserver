@@ -344,6 +344,7 @@ LOOP:
                 }
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
+#ifdef DEBUG
             } else if (!strcmp(path, "/getclientsnum")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 unsigned int num = GetClientsNum();
@@ -381,6 +382,7 @@ LOOP:
                 unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
                 Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
+#endif
             } else {
                 Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
                 Epoll_Delete(epoll);
