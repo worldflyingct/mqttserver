@@ -160,7 +160,7 @@ func RemoveClientFromMqttClients (ms *MqttServer, mqttclient *MqttClient) {
                 ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
             }
             if *mqttclient.willtopic != "" {
-                PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
+                PublishMqtt(ms, *mqttclient.willtopic, mqttclient.willmessage, false)
             }
             return
         }
@@ -665,7 +665,7 @@ func CloseServer (ms *MqttServer) {
     }
 }
 
-func PublishData (ms *MqttServer, topic string, msg []byte) {
+func PublishMqtt (ms *MqttServer, topic string, msg []byte, needlock bool) {
     tslen := len(ms.topics)
     for i := 0 ; i < tslen ; i+=1 {
         if ms.topics[i] == topic {
@@ -704,7 +704,9 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
     copy(b[offset:], []byte(topic))
     offset += topiclen
     copy(b[offset:], []byte(msg))
-    ms.mutex.RLock()
+    if needlock {
+        ms.mutex.RLock()
+    }
     clientlen := len(ms.mqttclients)
     for i := 0 ; i < clientlen ; i+=1 {
         ms.mqttclients[i].mutex.RLock()
@@ -716,5 +718,11 @@ func PublishData (ms *MqttServer, topic string, msg []byte) {
         }
         ms.mqttclients[i].mutex.RUnlock()
     }
-    ms.mutex.RUnlock()
+    if needlock {
+        ms.mutex.RUnlock()
+    }
+}
+
+func PublishData (ms *MqttServer, topic string, msg []byte) {
+    PublishMqtt(ms, topic, msg, true);
 }
