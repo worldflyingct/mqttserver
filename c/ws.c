@@ -344,7 +344,6 @@ LOOP:
                 }
                 Epoll_Write(epoll, s, res_len);
                 epoll->wsstate = 1;
-#ifdef DEBUG
             } else if (!strcmp(path, "/getclientsnum")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 unsigned int num = GetClientsNum();
@@ -373,6 +372,7 @@ LOOP:
                 ShowTopics();
                 Epoll_Write(epoll, SUCCESSPAGE, sizeof(SUCCESSPAGE));
                 Epoll_Delete(epoll);
+#ifdef DEBUG
             } else if (!strcmp(path, "/getmallocnum")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 int malloc_num = GetMallocNum();

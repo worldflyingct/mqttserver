@@ -4,7 +4,7 @@ CFLAGS=-std=gnu99 -O3
 uit: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o smalloc.o
 	$(CC) $(CFLAGS) -o $@ $^ -lssl -lcrypto
 
-main.o: main.c event_poll.h ws.h config.h
+main.o: main.c event_poll.h ws.h config.h smalloc.h
 	$(CC) $(CFLAGS) -c -o $@ main.c
 
 mqtt.o: mqtt.c mqtt.h event_poll.h sha256.h config.h smalloc.h
@@ -34,7 +34,7 @@ sha1.o: sha1.c
 sha256.o: sha256.c sha256.h
 	$(CC) $(CFLAGS) -c -o $@ sha256.c
 
-smalloc.o: smalloc.c
+smalloc.o: smalloc.c smalloc.h
 	$(CC) $(CFLAGS) -c -o $@ smalloc.c
 
 clean:

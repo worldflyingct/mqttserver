@@ -1,3 +1,5 @@
+#include "smalloc.h"
+#ifdef DEBUG
 #include <stdio.h>
 #include <stdlib.h>
 #include <mcheck.h>
@@ -49,3 +51,4 @@ int setmemcheck () {
     }
     return res;
 }
+#endif
