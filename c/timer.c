@@ -38,4 +38,5 @@ int Init_Timer() {
     if (setitimer(ITIMER_REAL, &timer, &oldtimer)) {
         return -3;
     }
+    return 0;
 }

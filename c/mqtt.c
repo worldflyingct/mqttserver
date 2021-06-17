@@ -337,7 +337,7 @@ LOOP:
             if ((buff[0] & 0x06) != 0x00) { // qos不为0时，存在报文标识符。
                 unsigned char puback[4] = { PUBACK, 0x02, buff[offset], buff[offset+1] };
                 epoll->write(epoll, puback, 4);
-                offset += 2
+                offset += 2;
             }
             SendToClient(buff, packagelen, topic, topiclen);
         } else if (type == PUBACK) {

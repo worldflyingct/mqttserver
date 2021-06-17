@@ -49,7 +49,10 @@ int main () {
         printf("in %s, at %d\n", __FILE__, __LINE__);
         return -7;
     }
-    Init_Timer();
+    if (Init_Timer()) {
+        printf("in %s, at %d\n", __FILE__, __LINE__);
+        return -8;
+    }
     event_poll_loop();
     return 0;
 }
