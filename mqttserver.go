@@ -216,7 +216,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				case 0x30: // publish
 					log.Println("publish")
 					if (data[0] & 0x05) != 0x00 { // 本程序不处理retain不为0，QOS大于1的报文
-						log.Println("publish retain is not 0 or qos >2.")
+						log.Println("publish retain is not 0 or qos>1.")
 						return
 					}
 					if num < offset+2 {

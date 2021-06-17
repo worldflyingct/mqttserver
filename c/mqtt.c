@@ -320,8 +320,8 @@ LOOP:
         epoll->keepalive = epoll->defaultkeepalive;
         unsigned char type = buff[0] & 0xf0;
         if (type == PUBLISH) {
-            if ((buff[0] & 0x0f) != 0x00) { // 本程序不处理dup，qos与retain不为0的报文。
-                printf("publish dup,qos or retain is not 0, in %s, at %d\n", __FILE__, __LINE__);
+            if ((buff[0] & 0x05) != 0x00) { // 本程序不处理retain不为0或是qos大于1的报文。
+                printf("publish retain is not 0 or qos>1, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
                 return;
             }
@@ -333,8 +333,16 @@ LOOP:
             unsigned short topiclen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
             offset += 2;
             unsigned char *topic = buff + offset;
+            offset += topiclen;
+            if ((buff[0] & 0x06) != 0x00) { // qos不为0时，存在报文标识符。
+                unsigned char puback[4] = { PUBACK, 0x02, buff[offset], buff[offset+1] };
+                epoll->write(epoll, puback, 4);
+                offset += 2
+            }
             SendToClient(buff, packagelen, topic, topiclen);
-        } else if (type == PUBACK || type == PUBREC || type == PUBREL || type == PUBCOMP) {
+        } else if (type == PUBACK) {
+            return;
+        } else if (type == PUBREC || type == PUBREL || type == PUBCOMP) {
             Epoll_Delete(epoll);
             return;
         } else if (type == SUBSCRIBE) {
