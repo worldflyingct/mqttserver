@@ -9,7 +9,6 @@ struct SubScribeList {
 
 void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long len);
 void DeleteMqttClient (EPOLL *epoll);
-void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen);
 void ShowClients ();
 void ShowTopics ();
 unsigned char CheckClientStatus (char *clientid, unsigned int clientidlen);

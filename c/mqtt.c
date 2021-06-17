@@ -125,7 +125,7 @@ static void SendToClient (unsigned char *package, unsigned int packagelen, unsig
     }
 }
 
-void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen) {
+static void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen) {
     unsigned int len = 2 + topiclen + msglen;
     unsigned int packagelen;
     unsigned int offset;
