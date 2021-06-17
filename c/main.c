@@ -3,6 +3,7 @@
 #include "event_poll.h"
 #include "ws.h"
 #include "tcp.h"
+#include "timer.h"
 #include "smalloc.h"
 
 int main () {
@@ -48,6 +49,7 @@ int main () {
         printf("in %s, at %d\n", __FILE__, __LINE__);
         return -7;
     }
+    Init_Timer();
     event_poll_loop();
     return 0;
 }

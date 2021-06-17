@@ -14,9 +14,6 @@
 #define KEYPATH             "server.key"
 #define MQTTUSER            "5QdISjSg40jHFyzR"
 #define MQTTKEY             "QLUL276kqXn55lBK"
-#define TCPKEEPIDLE         "10"
-#define TCPKEEPINTERVAL     "3"
-#define TCPKEEPCOUNT        "3"
 #define DEFAULTCONFIG       "{\n" \
                             "  \"tcpport\": "TCPPORT",\n" \
                             "  \"tlsport\": "TLSPORT",\n" \
@@ -25,10 +22,7 @@
                             "  \"crtpath\": \""CRTPATH"\",\n" \
                             "  \"keypath\": \""KEYPATH"\",\n" \
                             "  \"mqttuser\": \""MQTTUSER"\",\n" \
-                            "  \"mqttkey\": \""MQTTKEY"\",\n" \
-                            "  \"tcpkeepidle\": "TCPKEEPIDLE",\n" \
-                            "  \"tcpkeepinterval\": "TCPKEEPINTERVAL",\n" \
-                            "  \"tcpkeepcount\": "TCPKEEPCOUNT"\n" \
+                            "  \"mqttkey\": \""MQTTKEY"\"\n" \
                             "}"
 
 struct ConfigData configdata;
@@ -45,9 +39,6 @@ struct ConfigData* InitConfig () {
         strcpy(configdata.keypath, KEYPATH);
         strcpy(configdata.mqttuser, MQTTUSER);
         strcpy(configdata.mqttkey, MQTTKEY);
-        configdata.tcpkeepidle = atoi(TCPKEEPIDLE);
-        configdata.tcpkeepinterval = atoi(TCPKEEPINTERVAL);
-        configdata.tcpkeepcount = atoi(TCPKEEPCOUNT);
         fd = open("config.json", O_CREAT|O_WRONLY, 0777);
         if (fd < 0) {
             printf("init config file error.");
@@ -120,24 +111,6 @@ struct ConfigData* InitConfig () {
         strncpy(configdata.mqttkey, obj->valuestring, 32);
     } else {
         memcpy(configdata.mqttkey, MQTTKEY, sizeof(MQTTKEY));
-    }
-    obj = cJSON_GetObjectItem(json, "tcpkeepidle");
-    if (obj) {
-        configdata.tcpkeepidle = obj->valueint;
-    } else {
-        configdata.tcpkeepidle = atoi(TCPKEEPIDLE);
-    }
-    obj = cJSON_GetObjectItem(json, "tcpkeepinterval");
-    if (obj) {
-        configdata.tcpkeepinterval = obj->valueint;
-    } else {
-        configdata.tcpkeepinterval = atoi(TCPKEEPINTERVAL);
-    }
-    obj = cJSON_GetObjectItem(json, "tcpkeepcount");
-    if (obj) {
-        configdata.tcpkeepcount = obj->valueint;
-    } else {
-        configdata.tcpkeepcount = atoi(TCPKEEPCOUNT);
     }
     cJSON_Delete(json);
     return &configdata;

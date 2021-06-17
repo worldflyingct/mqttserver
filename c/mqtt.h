@@ -14,5 +14,6 @@ void ShowClients ();
 void ShowTopics ();
 unsigned char CheckClientStatus (char *clientid, unsigned int clientidlen);
 unsigned int GetClientsNum ();
+void CheckMqttClients ();
 
 #endif

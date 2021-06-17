@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-std=gnu99 -O3
 
-uit: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o smalloc.o
+uit: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o smalloc.o timer.o
 	$(CC) $(CFLAGS) -o $@ $^ -lssl -lcrypto
 
 main.o: main.c event_poll.h ws.h config.h smalloc.h
@@ -18,6 +18,9 @@ tcp.o: tcp.c event_poll.h mqtt.h config.h
 
 event_poll.o: event_poll.c event_poll.h mqtt.h smalloc.h config.h
 	$(CC) $(CFLAGS) -c -o $@ event_poll.c
+
+timer.o: timer.c event_poll.h mqtt.h
+	$(CC) $(CFLAGS) -c -o $@ timer.c
 
 config.o: config.c config.h cJSON.h
 	$(CC) $(CFLAGS) -c -o $@ config.c

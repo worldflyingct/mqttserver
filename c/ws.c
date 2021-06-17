@@ -446,7 +446,7 @@ int Ws_Create () {
             close(fd);
             return -3;
         }
-        EPOLL *epoll = add_fd_to_poll(fd, 0);
+        EPOLL *epoll = add_fd_to_poll(fd, 1);
         if (epoll == NULL) {
             printf("add fd to poll fail, fd: %d, in %s, at %d\n", fd, __FILE__, __LINE__);
             close(fd);

@@ -119,6 +119,7 @@ static void SendToClient (unsigned char *package, unsigned int packagelen, unsig
         while (tte != NULL) {
             EPOLL *epoll = tte->epoll;
             epoll->write(epoll, package, packagelen);
+            epoll->keepalive = epoll->defaultkeepalive;
             tte = tte->tail;
         }
     }
@@ -222,6 +223,20 @@ void DeleteMqttClient (EPOLL *epoll) {
     }
 }
 
+void CheckMqttClients () { // 检查mqtt心跳
+    EPOLL *epoll = epollhead;
+    while (epoll != NULL) {
+        EPOLL *tmp = epoll;
+        epoll = epoll->tail;
+        if (tmp->mqttstate == 1 && tmp->defaultkeepalive > 0) {
+            tmp->keepalive--;
+            if (tmp->keepalive == 0) {
+                Epoll_Delete(tmp);
+            }
+        }
+    }
+}
+
 static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned int *packagelen, unsigned int *offset) {
     if (len < 2) {
         printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -302,6 +317,7 @@ LOOP:
         return;
     }
     if (epoll->mqttstate) {
+        epoll->keepalive = epoll->defaultkeepalive;
         unsigned char type = buff[0] & 0xf0;
         if (type == PUBLISH) {
             if ((buff[0] & 0x0f) != 0x00) { // 本程序不处理dup，qos与retain不为0的报文。
@@ -314,7 +330,7 @@ LOOP:
                 Epoll_Delete(epoll);
                 return;
             }
-            unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+            unsigned short topiclen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
             offset += 2;
             unsigned char *topic = buff + offset;
             SendToClient(buff, packagelen, topic, topiclen);
@@ -340,7 +356,7 @@ LOOP:
                     Epoll_Delete(epoll);
                     return;
                 }
-                unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+                unsigned short topiclen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
                 offset += 2;
                 if (packagelen < offset + topiclen) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -455,7 +471,7 @@ LOOP:
                     Epoll_Delete(epoll);
                     return;
                 }
-                unsigned short topiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+                unsigned short topiclen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
                 offset += 2;
                 if (packagelen < offset + topiclen) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -503,7 +519,7 @@ LOOP:
             Epoll_Delete(epoll);
             return;
         }
-        unsigned short protnamelen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        unsigned short protnamelen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + protnamelen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -548,14 +564,15 @@ LOOP:
             Epoll_Delete(epoll);
             return;
         }
-        epoll->keepalive = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        epoll->defaultkeepalive = 1.5 * (((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1]);
+        epoll->keepalive = epoll->defaultkeepalive;
         offset += 2;
         if (packagelen < offset + 2) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
             return;
         }
-        unsigned short clientidlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        unsigned short clientidlen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + clientidlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -570,7 +587,7 @@ LOOP:
                 Epoll_Delete(epoll);
                 return;
             }
-            unsigned short willtopiclen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+            unsigned short willtopiclen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
             offset += 2;
             if (packagelen < offset + willtopiclen) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -592,7 +609,7 @@ LOOP:
                 Epoll_Delete(epoll);
                 return;
             }
-            unsigned short willmsglen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+            unsigned short willmsglen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
             offset += 2;
             if (packagelen < offset + willmsglen) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -615,7 +632,7 @@ LOOP:
             Epoll_Delete(epoll);
             return;
         }
-        unsigned short userlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        unsigned short userlen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + userlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -635,7 +652,7 @@ LOOP:
             Epoll_Delete(epoll);
             return;
         }
-        unsigned short passlen = 256 * (unsigned short)buff[offset] + (unsigned short)buff[offset+1];
+        unsigned short passlen = ((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1];
         offset += 2;
         if (packagelen < offset + passlen) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);

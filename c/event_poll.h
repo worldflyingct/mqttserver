@@ -46,6 +46,7 @@ struct EPOLL {
     unsigned char *mqttwillmsg;
     unsigned short mqttwillmsglen;
     struct SubScribeList *sbbl;
+    unsigned short defaultkeepalive;
     unsigned short keepalive;
     struct HTTPHEAD *httphead;
     unsigned char wsstate; // 0为未注，1为注册
@@ -57,7 +58,7 @@ struct EPOLL {
 
 int event_poll_create ();
 void event_poll_loop ();
-EPOLL *add_fd_to_poll (int fd, int opt);
+EPOLL *add_fd_to_poll (int fd, int out);
 int mod_fd_at_poll (EPOLL *epoll, int eout);
 void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
 void Epoll_Delete (EPOLL *epoll);
