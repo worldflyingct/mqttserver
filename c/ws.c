@@ -60,6 +60,21 @@ static void Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned 
     }
 }
 
+#define MINPACKAGESIZE   32
+
+static int CreateWsBuffer (EPOLL *epoll, unsigned char *buff, unsigned int packagelen, unsigned int len) {
+    unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
+    if (package == NULL) {
+        return -1;
+    }
+    memcpy(package, buff, len);
+    epoll->wspackage = package;
+    epoll->wspackagecap = packagelen;
+    epoll->wspackagelen = packagelen;
+    epoll->wsuselen = len;
+    return 0;
+}
+
 static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
     ssize_t len;
     if (epoll->tls) {
@@ -110,8 +125,9 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
 LOOP:
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         if (len < 2) {
-            printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
-            Epoll_Delete(epoll);
+            if (CreateWsBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+                Epoll_Delete(epoll);
+            }
             return;
         }
         unsigned int datalen = buff[1] & 0x7f;
@@ -122,8 +138,9 @@ LOOP:
                 packagelen = datalen + 6;
             } else if (datalen == 0x7e) {
                 if (len < 4) {
-                    printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
+                    if (CreateWsBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+                        Epoll_Delete(epoll);
+                    }
                     return;
                 }
                 mask = buff + 4;
@@ -132,8 +149,9 @@ LOOP:
                 packagelen = datalen + 8;
             } else {
                 if (len < 10) {
-                    printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
+                    if (CreateWsBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+                        Epoll_Delete(epoll);
+                    }
                     return;
                 }
                 mask = buff + 6;
@@ -148,8 +166,9 @@ LOOP:
                 packagelen = datalen + 2;
             } else if (datalen == 0x7e) {
                 if (len < 4) {
-                    printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
+                    if (CreateWsBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+                        Epoll_Delete(epoll);
+                    }
                     return;
                 }
                 data = buff + 4;
@@ -157,8 +176,9 @@ LOOP:
                 packagelen = datalen + 4;
             } else {
                 if (len < 10) {
-                    printf("ws data so short, in %s, at %d\n", __FILE__, __LINE__);
-                    Epoll_Delete(epoll);
+                    if (CreateWsBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+                        Epoll_Delete(epoll);
+                    }
                     return;
                 }
                 data = buff + 6;
@@ -167,16 +187,9 @@ LOOP:
             }
         }
         if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-            unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
-            if (package == NULL) {
+            if (CreateWsBuffer(epoll, buff, packagelen, len)) {
                 Epoll_Delete(epoll);
-                return;
             }
-            memcpy(package, buff, len);
-            epoll->wspackage = package;
-            epoll->wspackagecap = packagelen;
-            epoll->wspackagelen = packagelen;
-            epoll->wsuselen = len;
             return;
         }
         if (mask) {

@@ -237,19 +237,32 @@ void CheckMqttClients () { // 检查mqtt心跳
     }
 }
 
+#define MINPACKAGESIZE   32
+
+static int CreateMqttBuffer (EPOLL *epoll, unsigned char *buff, unsigned int packagelen, unsigned int len) {
+    unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
+    if (package == NULL) {
+        Epoll_Delete(epoll);
+        return -1;
+    }
+    memcpy(package, buff, len);
+    epoll->mqttpackage = package;
+    epoll->mqttpackagecap = packagelen;
+    epoll->mqttpackagelen = packagelen;
+    epoll->mqttuselen = len;
+    return 0;
+}
+
 static int GetMqttLength (unsigned char *buff, unsigned long len, unsigned int *packagelen, unsigned int *offset) {
     if (len < 2) {
-        printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
         return -1;
     }
     if ((buff[1] & 0x80) != 0x00) {
         if (len < 3) {
-            printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             return -2;
         }
         if ((buff[2] & 0x80) != 0x00) {
             if (len < 4) {
-                printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 return -3;
             }
             if ((buff[3] & 0x80) != 0x00) {
@@ -300,20 +313,15 @@ void HandleMqttClientRequest (EPOLL *epoll, unsigned char *buff, unsigned long l
     unsigned int offset;
 LOOP:
     if (GetMqttLength(buff, len, &packagelen, &offset)) {
-        Epoll_Delete(epoll);
+        if (CreateMqttBuffer(epoll, buff, MINPACKAGESIZE, len)) {
+            Epoll_Delete(epoll);
+        }
         return;
     }
     if (packagelen > len) { // 数据并未获取完毕，需要创建缓存并反复拉取数据
-        unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
-        if (package == NULL) {
+        if (CreateMqttBuffer(epoll, buff, packagelen, len)) {
             Epoll_Delete(epoll);
-            return;
         }
-        memcpy(package, buff, len);
-        epoll->mqttpackage = package;
-        epoll->mqttpackagecap = packagelen;
-        epoll->mqttpackagelen = packagelen;
-        epoll->mqttuselen = len;
         return;
     }
     if (epoll->mqttstate) {
