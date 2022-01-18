@@ -442,12 +442,14 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				clientid := string(data[offset : offset+clientidlen])
 				log.Println("clientid:", clientid)
 				offset += clientidlen
+				ms.mutex.RLock()
 				clientlen := len(ms.mqttclients)
 				for i := 0; i < clientlen; i += 1 {
 					if *ms.mqttclients[i].clientid == clientid {
 						ms.mqttclients[i].Close()
 					}
 				}
+				ms.mutex.RUnlock()
 				var willtopic string
 				var willmessage []byte
 				if needwill != 0 { // 需要遗嘱
