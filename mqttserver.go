@@ -81,8 +81,8 @@ type MqttServer struct {
 	topics      []string
 	tcpListen   *net.TCPListener
 	cb          Callback
-	username    *string
-	password    *string
+	username    string
+	password    string
 }
 
 func GetMqttDataLength(data []byte, num uint32) (uint32, uint32) {
@@ -499,7 +499,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				pass := string(data[offset : offset+passlen])
 				log.Println("password", pass)
 				offset += passlen
-				if user != *ms.username || pass != *ms.password {
+				if user != ms.username || pass != ms.password {
 					log.Println("username or password error", user, pass)
 					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
 					return
@@ -556,8 +556,8 @@ func StartServer(tcpport uint16, username string, password string, topics []stri
 		mqttclients: make([]*MqttClient, 0),
 		topics:      topics,
 		cb:          cb,
-		username:    &username,
-		password:    &password,
+		username:    username,
+		password:    password,
 		useful:      true,
 	}
 	go CheckMqttClients(ms)
