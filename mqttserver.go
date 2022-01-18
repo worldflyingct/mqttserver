@@ -550,7 +550,7 @@ func StartTcpServer(ms *MqttServer, tcpListen *net.TCPListener) {
 	}
 }
 
-func StartServer(tcpport int, username string, password string, topics []string, cb Callback) *MqttServer {
+func StartServer(tcpport uint16, username string, password string, topics []string, cb Callback) *MqttServer {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	ms := &MqttServer{
 		mqttclients: make([]*MqttClient, 0),
@@ -562,7 +562,7 @@ func StartServer(tcpport int, username string, password string, topics []string,
 	}
 	go CheckMqttClients(ms)
 	if tcpport != 0 {
-		p := strconv.Itoa(tcpport)
+		p := strconv.Itoa(int(tcpport))
 		addr, _ := net.ResolveTCPAddr("tcp4", ":"+p)
 		tcpListen, err := net.ListenTCP("tcp", addr)
 		if err != nil {
