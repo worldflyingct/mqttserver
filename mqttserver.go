@@ -21,7 +21,7 @@ import (
 )
 
 type MqttClient struct {
-	connType         int // 0为tcp, 1为ws
+	connType         uint8 // 0为tcp, 1为ws
 	tcp              net.Conn
 	ws               *websocket.Conn
 	clientid         *string
@@ -442,14 +442,6 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				clientid := string(data[offset : offset+clientidlen])
 				log.Println("clientid:", clientid)
 				offset += clientidlen
-				ms.mutex.RLock()
-				clientlen := len(ms.mqttclients)
-				for i := 0; i < clientlen; i += 1 {
-					if *ms.mqttclients[i].clientid == clientid {
-						ms.mqttclients[i].Close()
-					}
-				}
-				ms.mutex.RUnlock()
 				var willtopic string
 				var willmessage []byte
 				if needwill != 0 { // 需要遗嘱
@@ -512,6 +504,15 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
 					return
 				}
+				ms.mutex.RLock()
+				clientlen := len(ms.mqttclients)
+				for i := 0; i < clientlen; i += 1 {
+					if *ms.mqttclients[i].clientid == clientid {
+						ms.mqttclients[i].Close()
+						break
+					}
+				}
+				ms.mutex.RUnlock()
 				_, err = mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
 				if err != nil {
 					log.Println(err)
@@ -671,7 +672,7 @@ func ListenFastHttpWebSocket(ms *MqttServer, ctx *fasthttp.RequestCtx, params *W
 func CheckMqttClients(ms *MqttServer) {
 	for ms.useful {
 		time.Sleep(1 * time.Second)
-		ms.mutex.Lock()
+		ms.mutex.RLock()
 		mqttclientslen := len(ms.mqttclients)
 		for i := 0; i < mqttclientslen; i += 1 {
 			if ms.mqttclients[i].defaultkeepalive > 0 {
@@ -681,7 +682,7 @@ func CheckMqttClients(ms *MqttServer) {
 				}
 			}
 		}
-		ms.mutex.Unlock()
+		ms.mutex.RUnlock()
 	}
 }
 
