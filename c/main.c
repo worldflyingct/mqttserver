@@ -19,7 +19,7 @@ int main () {
         printf("in %s, at %d\n", __FILE__, __LINE__);
         return -1;
     }
-    printf("max open file is %l\n", sysconf(_SC_OPEN_MAX));
+    printf("max open file is %ld\n", sysconf(_SC_OPEN_MAX));
     if (event_poll_create()) {
         printf("in %s, at %d\n", __FILE__, __LINE__);
         return -2;
