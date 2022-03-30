@@ -106,7 +106,7 @@ func GetMqttDataLength(data []byte, num uint32) (uint32, uint32) {
 				datalen = (uint32(data[4]) << 21) | (uint32(data[3]&0x7f) << 14) | (uint32(data[2]&0x7f) << 7) | uint32(data[1]&0x7f) + 5
 				offset = 5
 			} else {
-				datalen = (uint32(data[3]) << 14) | (uint32(data[2]&0x7f) << 14) | uint32(data[1]&0x7f) + 4
+				datalen = (uint32(data[3]) << 14) | (uint32(data[2]&0x7f) << 7) | uint32(data[1]&0x7f) + 4
 				offset = 4
 			}
 		} else {
@@ -162,7 +162,7 @@ func RemoveClientFromMqttClients(ms *MqttServer, mqttclient *MqttClient) {
 				ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
 			}
 			if *mqttclient.willtopic != "" {
-				PublishMqtt(ms, *mqttclient.willtopic, mqttclient.willmessage, false)
+				publishMqtt(ms, *mqttclient.willtopic, mqttclient.willmessage, false)
 			}
 			break
 		}
@@ -201,10 +201,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 		}
 		for {
 			datalen, offset := GetMqttDataLength(data, num)
-			if datalen == 0 {
-				return
-			}
-			if num < datalen {
+			if datalen == 0 || num < datalen {
 				pack = data
 				packlen = datalen
 				uselen = num
@@ -699,7 +696,7 @@ func CloseServer(ms *MqttServer) {
 	ms.useful = false
 }
 
-func PublishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
+func publishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
 	tslen := len(ms.topics)
 	for i := 0; i < tslen; i += 1 {
 		if ms.topics[i] == topic {
@@ -758,5 +755,5 @@ func PublishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
 }
 
 func PublishData(ms *MqttServer, topic string, msg []byte) {
-	PublishMqtt(ms, topic, msg, true)
+	publishMqtt(ms, topic, msg, true)
 }
