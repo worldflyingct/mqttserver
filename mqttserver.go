@@ -148,6 +148,7 @@ func RemoveSliceByValue(arrs []*string, d string) []*string {
 }
 
 func RemoveClientFromMqttClients(ms *MqttServer, mqttclient *MqttClient) {
+	findclient := false
 	ms.mutex.Lock()
 	mqttclientslen := len(ms.mqttclients)
 	for i := 0; i < mqttclientslen; i += 1 {
@@ -161,13 +162,14 @@ func RemoveClientFromMqttClients(ms *MqttServer, mqttclient *MqttClient) {
 				copy(ms.mqttclients[i:], ms.mqttclients[i+1:])
 				ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
 			}
-			if *mqttclient.willtopic != "" {
-				publishMqtt(ms, *mqttclient.willtopic, mqttclient.willmessage, false)
-			}
+			findclient = true
 			break
 		}
 	}
 	ms.mutex.Unlock()
+	if *mqttclient.willtopic != "" && findclient {
+		PublishData(ms, *mqttclient.willtopic, mqttclient.willmessage)
+	}
 }
 
 func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
@@ -696,7 +698,7 @@ func CloseServer(ms *MqttServer) {
 	ms.useful = false
 }
 
-func publishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
+func PublishData(ms *MqttServer, topic string, msg []byte) {
 	tslen := len(ms.topics)
 	for i := 0; i < tslen; i += 1 {
 		if ms.topics[i] == topic {
@@ -735,9 +737,7 @@ func publishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
 	copy(b[offset:], []byte(topic))
 	offset += topiclen
 	copy(b[offset:], []byte(msg))
-	if needlock {
-		ms.mutex.RLock()
-	}
+	ms.mutex.RLock()
 	clientlen := len(ms.mqttclients)
 	for i := 0; i < clientlen; i += 1 {
 		ms.mqttclients[i].mutex.RLock()
@@ -749,11 +749,5 @@ func publishMqtt(ms *MqttServer, topic string, msg []byte, needlock bool) {
 		}
 		ms.mqttclients[i].mutex.RUnlock()
 	}
-	if needlock {
-		ms.mutex.RUnlock()
-	}
-}
-
-func PublishData(ms *MqttServer, topic string, msg []byte) {
-	publishMqtt(ms, topic, msg, true)
+	ms.mutex.RUnlock()
 }
