@@ -657,7 +657,7 @@ LOOP:
         }
         unsigned char *user = buff + offset;
         struct ConfigData *configdata = GetConfig();
-        if (strncmp(user, configdata->mqttuser, userlen)) { // 用户名错误
+        if (userlen != configdata->mqttuserlen || strncmp(user, configdata->mqttuser, userlen)) { // 用户名错误
             epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
             return;
@@ -676,73 +676,84 @@ LOOP:
             return;
         }
         unsigned char *pass = buff + offset;
-        // 密码计算开始
-        unsigned char *sha256signature = NULL;
-        unsigned int timestamp = 0;
-        unsigned int tsend = 0;
-        for (int i = 0 ; i < passlen ; ++i) {
-            if (pass[i] == '&') {
-                tsend = i;
-                sha256signature = pass + tsend + 1;
-                break;
-            } else if (pass[i] < '0' && pass[i] > '9') {
+        if (configdata->mqttkeymode) {
+            // 密码计算开始
+            unsigned char *sha256signature = NULL;
+            unsigned int timestamp = 0;
+            unsigned int tsend = 0;
+            for (int i = 0 ; i < passlen ; ++i) {
+                if (pass[i] == '&') {
+                    if (i + 65 != passlen) {
+                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                        Epoll_Delete(epoll);
+                        return;
+                    }
+                    tsend = i;
+                    sha256signature = pass + tsend + 1;
+                    break;
+                } else if (pass[i] < '0' && pass[i] > '9') {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                timestamp = 10 * timestamp + pass[i] - '0';
+            }
+            if (sha256signature == NULL) {
                 epoll->write(epoll, connloginfail, sizeof(connloginfail));
                 Epoll_Delete(epoll);
                 return;
             }
-            timestamp = 10 * timestamp + pass[i] - '0';
-        }
-        if (sha256signature == NULL) {
+            time_t t = time(NULL);
+            if ((t + 600 < timestamp) || (timestamp + 600 < t)) { // 时间误差太大，直接舍弃
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                Epoll_Delete(epoll);
+                return;
+            }
+            unsigned char input[64];
+            memcpy(input, pass, tsend);
+            input[tsend] = '&';
+            unsigned int keylen = 0;
+            unsigned char *keyaddr = input + tsend + 1;
+            while (configdata->mqttkey[keylen] != '\0') {
+                keyaddr[keylen] = configdata->mqttkey[keylen];
+                ++keylen;
+            }
+            unsigned char output[32];
+            sha256_get(output, input, tsend + 1 + keylen);
+            for (int i = 0 ; i < 32 ; ++i) {
+                unsigned char a = sha256signature[2*i];
+                unsigned char o;
+                if ('a' <= a && a <= 'f') {
+                    o = (a - 'a' + 10) << 4;
+                } else if ('0' <= a && a <= '9') {
+                    o = (a - '0') << 4;
+                } else {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                a = sha256signature[2*i+1];
+                if ('a' <= a && a <= 'f') {
+                    o |= a - 'a' + 10;
+                } else if ('0' <= a && a <= '9') {
+                    o |= a - '0';
+                } else {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                if (o != output[i]) {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    Epoll_Delete(epoll);
+                    return;
+                }
+            }
+            // 密码计算结束
+        } else if (passlen != configdata->mqttkeylen || strncmp(pass, configdata->mqttkey, passlen)) {
             epoll->write(epoll, connloginfail, sizeof(connloginfail));
             Epoll_Delete(epoll);
             return;
         }
-        time_t t = time(NULL);
-        if ((t + 600 < timestamp) || (timestamp + 600 < t)) { // 时间误差太大，直接舍弃
-            epoll->write(epoll, connloginfail, sizeof(connloginfail));
-            Epoll_Delete(epoll);
-            return;
-        }
-        unsigned char input[64];
-        memcpy(input, pass, tsend);
-        input[tsend] = '&';
-        unsigned int keylen = 0;
-        unsigned char *keyaddr = input + tsend + 1;
-        while (configdata->mqttkey[keylen] != '\0') {
-            keyaddr[keylen] = configdata->mqttkey[keylen];
-            ++keylen;
-        }
-        unsigned char output[32];
-        sha256_get(output, input, tsend + 1 + keylen);
-        for (int i = 0 ; i < 32 ; ++i) {
-            unsigned char a = sha256signature[2*i];
-            unsigned char o;
-            if ('a' <= a && a <= 'f') {
-                o = (a - 'a' + 10) << 4;
-            } else if ('0' <= a && a <= '9') {
-                o = (a - '0') << 4;
-            } else {
-                epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                Epoll_Delete(epoll);
-                return;
-            }
-            a = sha256signature[2*i+1];
-            if ('a' <= a && a <= 'f') {
-                o |= a - 'a' + 10;
-            } else if ('0' <= a && a <= '9') {
-                o |= a - '0';
-            } else {
-                epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                Epoll_Delete(epoll);
-                return;
-            }
-            if (o != output[i]) {
-                epoll->write(epoll, connloginfail, sizeof(connloginfail));
-                Epoll_Delete(epoll);
-                return;
-            }
-        }
-        // 密码计算结束
         epoll->write(epoll, connsuccess, sizeof(connsuccess));
         epoll->mqttstate = 1;
         EPOLL *e = epollhead;
