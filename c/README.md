@@ -2,7 +2,10 @@
 依赖ssl，安装方法为apt-get install libssl-dev  
 # mqtt用户名密码说明
 用户名在config.json中配置，用户名为mqttuser，  
-密码需要通过计算得到计算方法为首先获得时间戳，然后通过&与mqttkey的值进行拼接成临时字符串  
+根据config.json中的mqttkeymode不同，密码方式也不同:  
+当为0时，mqtt密码就是config.json中的mqttkey  
+当为1时，密码需要通过计算得到，计算方法如下:  
+为首先获得时间戳，然后通过&与mqttkey的值进行拼接成临时字符串  
 然后通过sha256计算，最后再替换临时字符串中mqttkey成为新的字符串作为密码  
 如当前时间戳为1619702833，mqttkey为QLUL276kqXn55lBK  
 那么临时字符串就为1619702833&QLUL276kqXn55lBK  
