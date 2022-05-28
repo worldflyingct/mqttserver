@@ -538,6 +538,12 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 	}
 }
 
+func SubscribeAll(ms *MqttServer, topics []string) {
+	ms.mutex.Lock()
+	ms.topics = topics
+	ms.mutex.Unlock()
+}
+
 func Subscribe(ms *MqttServer, topics []string) {
 	ms.mutex.Lock()
 	t := ms.topics
