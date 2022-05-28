@@ -538,6 +538,44 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 	}
 }
 
+func Subscribe(ms *MqttServer, topics []string) {
+	ms.mutex.Lock()
+	t := ms.topics
+	for _, v1 := range topics {
+		b := false
+		for _, v2 := range t {
+			if v1 == v2 {
+				b = true
+				break
+			}
+		}
+		if b {
+			continue
+		}
+		t = append(t, v1)
+	}
+	ms.topics = t
+	ms.mutex.Unlock()
+}
+
+func Unsubscribe(ms *MqttServer, topics []string) {
+	ms.mutex.Lock()
+	t := ms.topics
+	tlen := len(t)
+	for _, v1 := range topics {
+		for n, v2 := range t {
+			if v1 == v2 {
+				copy(t[:n], t[n+1:])
+				t = t[:tlen-1]
+				tlen--
+				break
+			}
+		}
+	}
+	ms.topics = t
+	ms.mutex.Unlock()
+}
+
 func StartTcpServer(ms *MqttServer, tcpListen *net.TCPListener) {
 	for {
 		tcpclient, err := (*tcpListen).Accept()
