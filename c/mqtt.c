@@ -387,6 +387,7 @@ LOOP:
                     return;
                 }
                 if (buff[offset] != 0x00 && buff[offset] != 0x01 && buff[offset] != 0x02) {
+                    printf("subscribe qos error, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Delete(epoll);
                     return;
                 }

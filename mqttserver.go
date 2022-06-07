@@ -303,8 +303,8 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 							log.Println("mqtt data so short.")
 							return
 						}
-						if data[offset] != 0 {
-							log.Println("only support Requested QoS is 0.")
+						if data[offset] != 0 && data[offset] != 0 && data[offset] != 0 {
+							log.Println("subscribe qos error.")
 							return
 						}
 						offset += 1 // 跳过迁移服务质量等级
