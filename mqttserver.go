@@ -303,7 +303,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 							log.Println("mqtt data so short.")
 							return
 						}
-						if data[offset] != 0 && data[offset] != 0 && data[offset] != 0 {
+						if data[offset] != 0 && data[offset] != 1 && data[offset] != 2 {
 							log.Println("subscribe qos error.")
 							return
 						}
