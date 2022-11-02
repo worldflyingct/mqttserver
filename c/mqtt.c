@@ -568,12 +568,6 @@ LOOP:
             Epoll_Delete(epoll);
             return;
         }
-        if (((buff[offset] & 0x04) != 0x00) && ((buff[offset] & 0x38) != 0x00)) { // 如果有遗嘱，遗嘱retain为0，遗嘱qos为0，清空session的模式。
-            printf("no support mode:0x%02x, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
-            epoll->write(epoll, connsererr, sizeof(connsererr));
-            Epoll_Delete(epoll);
-            return;
-        }
         unsigned char needwill = buff[offset] & 0x04;
         offset += 1;
         if (packagelen < offset + 2) {
