@@ -328,11 +328,6 @@ LOOP:
         epoll->keepalive = epoll->defaultkeepalive;
         unsigned char type = buff[0] & 0xf0;
         if (type == PUBLISH) {
-            if ((buff[0] & 0x05) != 0x00) { // 本程序不处理retain不为0或是qos大于1的报文。
-                printf("publish retain is not 0 or qos>1, in %s, at %d\n", __FILE__, __LINE__);
-                Epoll_Delete(epoll);
-                return;
-            }
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
