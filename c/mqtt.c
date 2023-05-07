@@ -22,12 +22,17 @@
 #define PINGRESP        0xd0
 #define DISCONNECT      0xe0
 
-static const unsigned char connsuccess[]   = {CONNACK, 0x02, 0x00, 0x00};
-static const unsigned char connvererr[]    = {CONNACK, 0x02, 0x00, 0x01};
-static const unsigned char connsererr[]    = {CONNACK, 0x02, 0x00, 0x03};
-static const unsigned char connloginfail[] = {CONNACK, 0x02, 0x00, 0x04};
-static const unsigned char connnologin[]   = {CONNACK, 0x02, 0x00, 0x05};
-static const unsigned char pingresp[]      = {PINGRESP, 0x00};
+static const unsigned char connsuccess[]     = {CONNACK, 0x02, 0x00, 0x00};
+static const unsigned char connvererr[]      = {CONNACK, 0x02, 0x00, 0x01};
+static const unsigned char connvererrv5[]    = {CONNACK, 0x03, 0x00, 0x84, 0x00};
+static const unsigned char connsererr[]      = {CONNACK, 0x02, 0x00, 0x03};
+static const unsigned char connsererrv5[]    = {CONNACK, 0x03, 0x00, 0x80, 0x00};
+static const unsigned char connautherrv5[]   = {CONNACK, 0x03, 0x00, 0x8c, 0x00};
+static const unsigned char connloginfail[]   = {CONNACK, 0x02, 0x00, 0x04};
+static const unsigned char connloginfailv5[] = {CONNACK, 0x03, 0x00, 0x86, 0x00};
+static const unsigned char connnologin[]     = {CONNACK, 0x02, 0x00, 0x05};
+static const unsigned char connnologinv5[]   = {CONNACK, 0x03, 0x00, 0x8c, 0x00};
+static const unsigned char pingresp[]        = {PINGRESP, 0x00};
 
 struct TopicToEpoll {
     EPOLL *epoll;
@@ -338,8 +343,13 @@ LOOP:
             unsigned char *topic = buff + offset;
             offset += topiclen;
             if ((buff[0] & 0x06) != 0x00) { // qos不为0时，存在报文标识符。
-                unsigned char puback[4] = { PUBACK, 0x02, buff[offset], buff[offset+1] };
-                epoll->write(epoll, puback, 4);
+                if (epoll->mqttversion == 5) {
+                    unsigned char puback[6] = { PUBACK, 0x04, buff[offset], buff[offset+1], 0x00, 0x00 };
+                    epoll->write(epoll, puback, sizeof(puback));
+                } else {
+                    unsigned char puback[4] = { PUBACK, 0x02, buff[offset], buff[offset+1] };
+                    epoll->write(epoll, puback, sizeof(puback));
+                }
                 offset += 2;
             }
             SendToClient(buff, packagelen, topic, topiclen);
@@ -358,9 +368,36 @@ LOOP:
                 Epoll_Delete(epoll);
                 return;
             }
-            unsigned char suback[1024] = { SUBACK, 0x02, buff[offset], buff[offset+1] };
+            unsigned char suback[1024];
+            unsigned short ackoffset;
+            if (epoll->mqttversion == 5) {
+                suback[0] = SUBACK;
+                suback[1] = 0x02;
+                suback[2] = buff[offset];
+                suback[3] = buff[offset+1];
+                ackoffset = 4;
+            } else {
+                suback[0] = SUBACK;
+                suback[1] = 0x03;
+                suback[2] = buff[offset];
+                suback[3] = buff[offset+1];
+                suback[4] = 0x00;
+                ackoffset = 5;
+            }
             offset += 2;
-            unsigned short ackoffset = 4;
+            if (epoll->mqttversion == 5) {
+                if (packagelen < offset+1) {
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                unsigned char subscribePropLen = buff[offset];
+                offset += 1;
+                if (packagelen < offset+subscribePropLen) { // 直接跳过mqttv5新属性，SUBSCRIBE Properties
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                offset += subscribePropLen;
+            }
             while (offset < packagelen) {
                 if (packagelen < offset + 2) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -475,8 +512,33 @@ LOOP:
                 Epoll_Delete(epoll);
                 return;
             }
-            unsigned char unsuback[4] = {UNSUBACK, 0x02, buff[offset], buff[offset+1]};
+            unsigned char unsuback[5];
+            if (epoll->mqttversion == 5) {
+                unsuback[0] = UNSUBACK;
+                unsuback[1] = 0x02;
+                unsuback[2] = buff[offset];
+                unsuback[3] = buff[offset+1];
+            } else {
+                unsuback[0] = UNSUBACK;
+                unsuback[1] = 0x03;
+                unsuback[2] = buff[offset];
+                unsuback[3] = buff[offset+1];
+                unsuback[4] = 0x00;
+            }
             offset += 2;
+            if (epoll->mqttversion == 5) {
+                if (packagelen < offset+1) {
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                unsigned char unSubscribePropLen = buff[offset];
+                offset += 1;
+                if (packagelen < offset+unSubscribePropLen) { // 直接跳过mqttv5新属性，UNSUBSCRIBE Properties
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                offset += unSubscribePropLen;
+            }
             while (offset < packagelen) {
                 if (packagelen < offset + 2) {
                     printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -503,7 +565,7 @@ LOOP:
                 }
                 offset += topiclen;
             }
-            epoll->write(epoll, unsuback, 4);
+            epoll->write(epoll, unsuback, unsuback[1]+2);
         } else if (type == PINGREQ) {
             if (buff[1] != 0x00 || packagelen != 2) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
@@ -522,7 +584,20 @@ LOOP:
         }
     } else {
         if ((buff[0] & 0xf0) != CONNECT) {
-            epoll->write(epoll, connnologin, sizeof(connnologin));
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connnologinv5, sizeof(connnologinv5));
+            } else {
+                epoll->write(epoll, connnologin, sizeof(connnologin));
+            }
+            Epoll_Delete(epoll);
+            return;
+        }
+        if ((buff[0] & 0x0f) != 0x00) {
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connsererrv5, sizeof(connsererrv5));
+            } else {
+                epoll->write(epoll, connsererr, sizeof(connsererr));
+            }
             Epoll_Delete(epoll);
             return;
         }
@@ -547,10 +622,15 @@ LOOP:
         }
         if (buff[offset] != 0x03 && buff[offset] != 0x04 && buff[offset] != 0x05) { // 0x03为mqtt3.1, 0x04为mqtt3.1.1, 0x05为mqtt5
             printf("no support mqtt version:%d, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
-            epoll->write(epoll, connvererr, sizeof(connvererr));
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connvererr, sizeof(connvererr));
+            } else {
+                epoll->write(epoll, connvererrv5, sizeof(connvererrv5));
+            }
             Epoll_Delete(epoll);
             return;
         }
+        epoll->mqttversion = buff[offset];
         offset += 1;
         if (packagelen < offset + 1) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
@@ -559,7 +639,11 @@ LOOP:
         }
         if ((buff[offset] & 0xc3) != 0xc2) { // 必须支持需要用户名，密码，清空session的模式。
             printf("no support mode:0x%02x, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
-            epoll->write(epoll, connsererr, sizeof(connsererr));
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connautherrv5, sizeof(connautherrv5));
+            } else {
+                epoll->write(epoll, connsererr, sizeof(connsererr));
+            }
             Epoll_Delete(epoll);
             return;
         }
@@ -573,6 +657,21 @@ LOOP:
         epoll->defaultkeepalive = 1.5 * (((unsigned short)buff[offset] << 8) + (unsigned short)buff[offset+1]);
         epoll->keepalive = epoll->defaultkeepalive;
         offset += 2;
+        if (epoll->mqttversion == 5) {
+            if (packagelen < offset+1) {
+                printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                Epoll_Delete(epoll);
+                return;
+            }
+            unsigned char connPropLen = buff[offset];
+            offset += 1;
+            if (packagelen < offset+connPropLen) { // 直接跳过mqttv5新属性，CONNECT Properties
+                printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                Epoll_Delete(epoll);
+                return;
+            }
+            offset += connPropLen;
+        }
         if (packagelen < offset + 2) {
             printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
             Epoll_Delete(epoll);
@@ -588,6 +687,21 @@ LOOP:
         unsigned char *clientid = buff + offset;
         offset += clientidlen;
         if (needwill) {
+            if (epoll->mqttversion == 5) {
+                if (packagelen < offset+1) {
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                unsigned char willPropLen = buff[offset];
+                offset += 1;
+                if (packagelen < offset+willPropLen) { // 直接跳过mqttv5新属性，Will Properties
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    Epoll_Delete(epoll);
+                    return;
+                }
+                offset += willPropLen;
+            }
             if (packagelen < offset + 2) {
                 printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
                 Epoll_Delete(epoll);
@@ -648,7 +762,11 @@ LOOP:
         unsigned char *user = buff + offset;
         struct ConfigData *configdata = GetConfig();
         if (userlen != configdata->mqttuserlen || strncmp(user, configdata->mqttuser, userlen)) { // 用户名错误
-            epoll->write(epoll, connloginfail, sizeof(connloginfail));
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+            } else {
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+            }
             Epoll_Delete(epoll);
             return;
         }
@@ -674,7 +792,11 @@ LOOP:
             for (int i = 0 ; i < passlen ; ++i) {
                 if (pass[i] == '&') {
                     if (i + 65 != passlen) {
-                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                        if (epoll->mqttversion == 5) {
+                            epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                        } else {
+                            epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                        }
                         Epoll_Delete(epoll);
                         return;
                     }
@@ -682,20 +804,32 @@ LOOP:
                     sha256signature = pass + tsend + 1;
                     break;
                 } else if (pass[i] < '0' && pass[i] > '9') {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    if (epoll->mqttversion == 5) {
+                        epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                    } else {
+                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    }
                     Epoll_Delete(epoll);
                     return;
                 }
                 timestamp = 10 * timestamp + pass[i] - '0';
             }
             if (sha256signature == NULL) {
-                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                if (epoll->mqttversion == 5) {
+                    epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                } else {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                }
                 Epoll_Delete(epoll);
                 return;
             }
             time_t t = time(NULL);
             if ((t + 600 < timestamp) || (timestamp + 600 < t)) { // 时间误差太大，直接舍弃
-                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                if (epoll->mqttversion == 5) {
+                    epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                } else {
+                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                }
                 Epoll_Delete(epoll);
                 return;
             }
@@ -718,7 +852,11 @@ LOOP:
                 } else if ('0' <= a && a <= '9') {
                     o = (a - '0') << 4;
                 } else {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    if (epoll->mqttversion == 5) {
+                        epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                    } else {
+                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    }
                     Epoll_Delete(epoll);
                     return;
                 }
@@ -728,19 +866,31 @@ LOOP:
                 } else if ('0' <= a && a <= '9') {
                     o |= a - '0';
                 } else {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    if (epoll->mqttversion == 5) {
+                        epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                    } else {
+                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    }
                     Epoll_Delete(epoll);
                     return;
                 }
                 if (o != output[i]) {
-                    epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    if (epoll->mqttversion == 5) {
+                        epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+                    } else {
+                        epoll->write(epoll, connloginfail, sizeof(connloginfail));
+                    }
                     Epoll_Delete(epoll);
                     return;
                 }
             }
             // 密码计算结束
         } else if (passlen != configdata->mqttkeylen || strncmp(pass, configdata->mqttkey, passlen)) {
-            epoll->write(epoll, connloginfail, sizeof(connloginfail));
+            if (epoll->mqttversion == 5) {
+                epoll->write(epoll, connloginfailv5, sizeof(connloginfailv5));
+            } else {
+                epoll->write(epoll, connloginfail, sizeof(connloginfail));
+            }
             Epoll_Delete(epoll);
             return;
         }

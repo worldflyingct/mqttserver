@@ -1,4 +1,4 @@
-CC=x86_64-linux-musl-gcc
+CC=gcc
 CFLAGS=-std=gnu99 -O3 -static
 
 uit: main.o mqtt.o ws.o tcp.o event_poll.o config.o cjson.o base64.o sha1.o sha256.o smalloc.o timer.o

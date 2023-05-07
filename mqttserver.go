@@ -134,7 +134,9 @@ func RemoveSliceByValue(arrs []*string, d string) []*string {
 	arrslen := len(arrs)
 	for i := 0; i < arrslen; i += 1 {
 		if *arrs[i] == d {
-			if i == 0 {
+			if arrslen == 1 {
+				return make([]*string, 0)
+			} else if i == 0 {
 				return arrs[1:]
 			} else if i+1 == arrslen {
 				return arrs[:arrslen-1]
@@ -154,7 +156,9 @@ func RemoveClientFromMqttClients(ms *MqttServer, mqttclient *MqttClient) {
 	for i := 0; i < mqttclientslen; i += 1 {
 		if ms.mqttclients[i] == mqttclient {
 			log.Println("connect lose, clientid:", *mqttclient.clientid)
-			if i == 0 {
+			if mqttclientslen == 1 {
+				ms.mqttclients = make([]*MqttClient, 0)
+			} else if i == 0 {
 				ms.mqttclients = ms.mqttclients[1:]
 			} else if i+1 == mqttclientslen {
 				ms.mqttclients = ms.mqttclients[:mqttclientslen-1]
@@ -179,6 +183,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 	packlen := uint32(0)
 	uselen := uint32(0)
 	state := false
+	mqttversion := uint8(0)
 
 	for {
 		data := make([]byte, 32*1024)
@@ -228,12 +233,25 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 					offset += topiclen
 					// qos为0时，无报文标识符，剩下的全部都是内容
 					if (data[0] & 0x06) != 0x00 { // qos不为0时，存在报文标识符。
-						_, err = mqttclient.Write([]byte{0x40, 0x02, data[offset], data[offset+1]})
-						if err != nil {
-							log.Println(err)
-							return
+						if mqttversion == 5 {
+							mqttclient.Write([]byte{0x40, 0x04, data[offset], data[offset+1], 0x00, 0x00})
+						} else {
+							mqttclient.Write([]byte{0x40, 0x02, data[offset], data[offset+1]})
 						}
 						offset += 2
+					}
+					if mqttversion == 5 {
+						if num < offset+1 {
+							log.Println("mqtt data so short.")
+							return
+						}
+						pubPropLen := uint32(data[offset])
+						offset += 1
+						if num < offset+pubPropLen { // 直接跳过mqttv5新属性，PUBLISH Properties
+							log.Println("mqtt data so short.")
+							return
+						}
+						offset += pubPropLen
 					}
 					tslen := len(ms.topics)
 					for i := 0; i < tslen; i += 1 {
@@ -274,8 +292,26 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 						log.Println("mqtt data so short.")
 						return
 					}
-					subackdata := []byte{0x90, 0x02, data[offset], data[offset+1]} // 报文标识符
+					var subackdata []byte
+					if mqttversion == 5 {
+						subackdata = []byte{0x90, 0x03, data[offset], data[offset+1], 0x00} // 报文标识符
+					} else {
+						subackdata = []byte{0x90, 0x02, data[offset], data[offset+1]} // 报文标识符
+					}
 					offset += 2
+					if mqttversion == 5 {
+						if num < offset+1 {
+							log.Println("mqtt data so short.")
+							return
+						}
+						subscribePropLen := uint32(data[offset])
+						offset += 1
+						if num < offset+subscribePropLen { // 直接跳过mqttv5新属性，SUBSCRIBE Properties
+							log.Println("mqtt data so short.")
+							return
+						}
+						offset += subscribePropLen
+					}
 					for offset < datalen {
 						if num < offset+2 {
 							log.Println("mqtt data so short.")
@@ -291,7 +327,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 						offset += topiclen
 						// log.Println("topic", topic)
 						mqttclient.mutex.Lock()
-						if HasSliceValue(mqttclient.topics, topic) == false {
+						if !HasSliceValue(mqttclient.topics, topic) {
 							mqttclient.topics = append(mqttclient.topics, &topic)
 						}
 						mqttclient.mutex.Unlock()
@@ -322,8 +358,26 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 						log.Println("mqtt data so short.")
 						return
 					}
-					unsubackdata := []byte{0xb0, 0x02, data[offset], data[offset+1]} // 报文标识符
+					var unsubackdata []byte
+					if mqttversion == 5 {
+						unsubackdata = []byte{0xb0, 0x03, data[offset], data[offset+1], 0x00} // 报文标识符
+					} else {
+						unsubackdata = []byte{0xb0, 0x02, data[offset], data[offset+1]} // 报文标识符
+					}
 					offset += 2
+					if mqttversion == 5 {
+						if num < offset+1 {
+							log.Println("mqtt data so short.")
+							return
+						}
+						unSubscribePropLen := uint32(data[offset])
+						offset += 1
+						if num < offset+unSubscribePropLen { // 直接跳过mqttv5新属性，UNSUBSCRIBE Properties
+							log.Println("mqtt data so short.")
+							return
+						}
+						offset += unSubscribePropLen
+					}
 					for offset < datalen {
 						if num < offset+2 {
 							log.Println("mqtt data so short.")
@@ -367,7 +421,11 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 			} else {
 				if (data[0] & 0xf0) != 0x10 { // connect
 					log.Println("client need connect first")
-					_, err = mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x05})
+					if mqttversion == 5 {
+						mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x8c, 0x00})
+					} else {
+						mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x05})
+					}
 					if err != nil {
 						log.Println(err)
 						return
@@ -377,7 +435,11 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				log.Println("connect")
 				if (data[0] & 0x0f) != 0x00 {
 					log.Println("mqtt connect package flag error")
-					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x03})
+					if mqttversion == 5 {
+						mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x80, 0x00})
+					} else {
+						mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x03})
+					}
 					return
 				}
 				if num < offset+2 {
@@ -398,17 +460,26 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				}
 				if data[offset] != 0x03 && data[offset] != 0x04 && data[offset] != 0x05 { // 0x03为mqtt3.1, 0x04为mqtt3.1.1, 0x05为mqtt5
 					log.Println("no support mqtt version", data[offset])
-					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+					if mqttversion == 5 {
+						mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x84, 0x00})
+					} else {
+						mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x01})
+					}
 					return
 				}
+				mqttversion = data[offset]
 				offset += 1
 				if num < offset+1 {
 					log.Println("mqtt data so short.")
 					return
 				}
 				if (data[offset] & 0xc3) != 0xc2 { // 必须支持需要用户名，密码，清空session的模式。
-					log.Println("need a username")
-					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
+					log.Println("need username password and session clean")
+					if mqttversion == 5 {
+						mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x8c, 0x00})
+					} else {
+						mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
+					}
 					return
 				}
 				needwill := data[offset] & 0x04
@@ -423,6 +494,19 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 					log.Println("mqtt data so short.")
 					return
 				}
+				if mqttversion == 5 {
+					if num < offset+1 {
+						log.Println("mqtt data so short.")
+						return
+					}
+					connPropLen := uint32(data[offset])
+					offset += 1
+					if num < offset+connPropLen { // 直接跳过mqttv5新属性，CONNECT Properties
+						log.Println("mqtt data so short.")
+						return
+					}
+					offset += connPropLen
+				}
 				clientidlen := 256*uint32(data[offset]) + uint32(data[offset+1])
 				offset += 2
 				if num < offset+clientidlen {
@@ -435,6 +519,19 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				var willtopic string
 				var willmessage []byte
 				if needwill != 0 { // 需要遗嘱
+					if mqttversion == 5 {
+						if num < offset+1 {
+							log.Println("mqtt data so short.")
+							return
+						}
+						willPropLen := uint32(data[offset])
+						offset += 1
+						if num < offset+willPropLen { // 直接跳过mqttv5新属性，Will Properties
+							log.Println("mqtt data so short.")
+							return
+						}
+						offset += willPropLen
+					}
 					if num < offset+2 {
 						log.Println("mqtt data so short.")
 						return
@@ -491,7 +588,11 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				offset += passlen
 				if user != ms.username || pass != ms.password {
 					log.Println("username or password error", user, pass)
-					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
+					if mqttversion == 5 {
+						mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x86, 0x00})
+					} else {
+						mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x04})
+					}
 					return
 				}
 				ms.mutex.RLock()
@@ -503,10 +604,10 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 					}
 				}
 				ms.mutex.RUnlock()
-				_, err = mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
-				if err != nil {
-					log.Println(err)
-					return
+				if mqttversion == 5 {
+					mqttclient.Write([]byte{0x20, 0x03, 0x00, 0x00, 0x00})
+				} else {
+					mqttclient.Write([]byte{0x20, 0x02, 0x00, 0x00})
 				}
 				mqttclient.clientid = &clientid
 				mqttclient.topics = make([]*string, 0)

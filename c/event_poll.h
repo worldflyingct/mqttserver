@@ -54,6 +54,7 @@ struct EPOLL {
     unsigned long wspackagecap; // 当前包缓存的实际容量
     unsigned long wspackagelen; // 当前包的理论大小
     unsigned long wsuselen; // 已经消耗的缓存
+    unsigned char mqttversion;
 };
 
 int event_poll_create ();
