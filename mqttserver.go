@@ -31,6 +31,7 @@ type MqttClient struct {
 	willmessage      []byte
 	defaultkeepalive uint16
 	keepalive        uint16
+	mqttversion      uint8
 }
 
 func (c MqttClient) Write(b []byte) (int, error) {
@@ -260,20 +261,15 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 							break
 						}
 					}
-					ms.mutex.RLock()
-					clientlen := len(ms.mqttclients)
-					for i := 0; i < clientlen; i += 1 {
-						ms.mqttclients[i].mutex.RLock()
-						topiclen = uint32(len(ms.mqttclients[i].topics))
-						for j := uint32(0); j < topiclen; j += 1 {
-							if *ms.mqttclients[i].topics[j] == topic {
-								ms.mqttclients[i].Write(data[:datalen])
-								ms.mqttclients[i].keepalive = ms.mqttclients[i].defaultkeepalive
-							}
-						}
-						ms.mqttclients[i].mutex.RUnlock()
+					var b, bv5 []byte
+					if mqttversion == 5 {
+						b = createPublishData(topic, data[offset:datalen], 4)
+						bv5 = data[:datalen]
+					} else {
+						b = data[:datalen]
+						bv5 = createPublishData(topic, data[offset:datalen], 5)
 					}
-					ms.mutex.RUnlock()
+					SendToClient(ms, b, bv5, topic)
 				case 0x40:
 					log.Println("puback")
 				case 0x50:
@@ -348,6 +344,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 						log.Println(err)
 						return
 					}
+					log.Println(subackdata)
 				case 0xa0: // unsubscribe
 					log.Println("unsubscribe")
 					if (data[0] & 0x0f) != 0x02 {
@@ -615,6 +612,7 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 				mqttclient.willmessage = willmessage
 				mqttclient.defaultkeepalive = uint16(1.5 * float64(keepalive))
 				mqttclient.keepalive = mqttclient.defaultkeepalive
+				mqttclient.mqttversion = mqttversion
 				ms.mutex.Lock()
 				ms.mqttclients = append(ms.mqttclients, mqttclient)
 				ms.mutex.Unlock()
@@ -834,18 +832,35 @@ func CloseServer(ms *MqttServer) {
 	ms.useful = false
 }
 
-func PublishData(ms *MqttServer, topic string, msg []byte) {
-	tslen := len(ms.topics)
-	for i := 0; i < tslen; i += 1 {
-		if ms.topics[i] == topic {
-			ms.cb(topic, msg)
+func SendToClient(ms *MqttServer, b, bv5 []byte, topic string) {
+	ms.mutex.RLock()
+	clientlen := len(ms.mqttclients)
+	for i := 0; i < clientlen; i += 1 {
+		ms.mqttclients[i].mutex.RLock()
+		topiclen := uint32(len(ms.mqttclients[i].topics))
+		for j := uint32(0); j < topiclen; j += 1 {
+			if *ms.mqttclients[i].topics[j] == topic {
+				if ms.mqttclients[i].mqttversion == 5 {
+					ms.mqttclients[i].Write(bv5)
+				} else {
+					ms.mqttclients[i].Write(b)
+				}
+			}
 		}
+		ms.mqttclients[i].mutex.RUnlock()
 	}
+	ms.mutex.RUnlock()
+}
+
+func createPublishData(topic string, msg []byte, mqttversion uint8) []byte {
 	var b []byte
 	var offset uint32
 	topiclen := uint32(len(topic))
 	msglen := uint32(len(msg))
 	num := 2 + topiclen + msglen
+	if mqttversion == 5 {
+		num += 1 // mqttv5多定义了一个PUBLISH Properties，这里需要送一个Property Length为0的字段
+	}
 	if num < 0x80 {
 		b = make([]byte, num+2)
 		offset = 2
@@ -872,18 +887,22 @@ func PublishData(ms *MqttServer, topic string, msg []byte) {
 	offset += 2
 	copy(b[offset:], []byte(topic))
 	offset += topiclen
-	copy(b[offset:], []byte(msg))
-	ms.mutex.RLock()
-	clientlen := len(ms.mqttclients)
-	for i := 0; i < clientlen; i += 1 {
-		ms.mqttclients[i].mutex.RLock()
-		topiclen := uint32(len(ms.mqttclients[i].topics))
-		for j := uint32(0); j < topiclen; j += 1 {
-			if *ms.mqttclients[i].topics[j] == topic {
-				ms.mqttclients[i].Write(b)
-			}
-		}
-		ms.mqttclients[i].mutex.RUnlock()
+	if mqttversion == 5 {
+		b[offset] = 0
+		offset += 1
 	}
-	ms.mutex.RUnlock()
+	copy(b[offset:], []byte(msg))
+	return b
+}
+
+func PublishData(ms *MqttServer, topic string, msg []byte) {
+	tslen := len(ms.topics)
+	for i := 0; i < tslen; i += 1 {
+		if ms.topics[i] == topic {
+			ms.cb(topic, msg)
+		}
+	}
+	b := createPublishData(topic, msg, 4)
+	bv5 := createPublishData(topic, msg, 5)
+	SendToClient(ms, b, bv5, topic)
 }

@@ -111,7 +111,7 @@ void ShowTopics () {
     }
 }
 
-static void SendToClient (unsigned char *package, unsigned int packagelen, unsigned char *topic, unsigned short topiclen) {
+static void SendToClient (unsigned char *package, unsigned int packagelen, unsigned char *packagev5, unsigned int packagev5len, unsigned char *topic, unsigned short topiclen) {
     struct TopicList *topiclist = topiclisthead;
     while (topiclist != NULL) {
         if (topiclist->topiclen == topiclen && !memcmp(topiclist->topic, topic, topiclen)) {
@@ -123,15 +123,26 @@ static void SendToClient (unsigned char *package, unsigned int packagelen, unsig
         struct TopicToEpoll *tte = topiclist->tte;
         while (tte != NULL) {
             EPOLL *epoll = tte->epoll;
-            epoll->write(epoll, package, packagelen);
+            if (epoll->mqttversion == 5) {
+                if (packagev5 != NULL && packagev5len > 0) {
+                    epoll->write(epoll, packagev5, packagev5len);
+                }
+            } else {
+                if (package != NULL && packagelen > 0) {
+                    epoll->write(epoll, package, packagelen);
+                }
+            }
             epoll->keepalive = epoll->defaultkeepalive;
             tte = tte->tail;
         }
     }
 }
 
-static void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen) {
+static unsigned char* CreatePublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen, unsigned char mqttversion, unsigned int *reslen) {
     unsigned int len = 2 + topiclen + msglen;
+    if (mqttversion == 5) {
+        len += 1; // mqttv5多定义了一个PUBLISH Properties，这里需要送一个Property Length为0的字段
+    }
     unsigned int packagelen;
     unsigned int offset;
     if (len < 0x80) {
@@ -147,7 +158,11 @@ static void PublishData (unsigned char *topic, unsigned short topiclen, unsigned
         packagelen = len + 5;
         offset = 5;
     }
-    char package[packagelen];
+    unsigned char* package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
+    if (package == NULL) {
+        *reslen = 0;
+        return package;
+    }
     unsigned char n = 0;
     while (len > 0) {
         package[n] |= 0x80;
@@ -161,8 +176,26 @@ static void PublishData (unsigned char *topic, unsigned short topiclen, unsigned
     offset += 2;
     memcpy(package + offset, topic, topiclen);
     offset += topiclen;
+	if (mqttversion == 5) {
+		package[offset] = 0;
+		offset += 1;
+	}
     memcpy(package + offset, msg, msglen);
-    SendToClient(package, packagelen, topic, topiclen);
+    *reslen = packagelen;
+    return package;
+}
+
+static void PublishData (unsigned char *topic, unsigned short topiclen, unsigned char *msg, unsigned int msglen) {
+    unsigned int packagelen, packagev5len;
+    unsigned char* package = CreatePublishData(topic, topiclen, msg, msglen, 4, &packagelen);
+    unsigned char* packagev5 = CreatePublishData(topic, topiclen, msg, msglen, 5, &packagev5len);
+    SendToClient(package, packagelen, packagev5, packagev5len, topic, topiclen);
+    if (package != NULL) {
+        sfree(package, __FILE__, __LINE__);
+    }
+    if (packagev5 != NULL) {
+        sfree(packagev5, __FILE__, __LINE__);
+    }
 }
 
 static void UnSubScribeFunc (EPOLL *epoll, struct SubScribeList *sbbl) {
@@ -352,7 +385,34 @@ LOOP:
                 }
                 offset += 2;
             }
-            SendToClient(buff, packagelen, topic, topiclen);
+            if (epoll->mqttversion == 5) {
+                if (packagelen < offset+1) {
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                unsigned char pubPropLen = buff[offset];
+                offset += 1;
+                if (packagelen < offset+pubPropLen) { // 直接跳过mqttv5新属性，PUBLISH Properties
+                    printf("mqtt data so short, in %s, at %d\n", __FILE__, __LINE__);
+                    return;
+                }
+                offset += pubPropLen;
+            }
+            unsigned char *b, *bv5, *btemp; // btemp是用于最后释放通过malloc创建出的新的publishdata来保存的指针，当mqttv5版本时指向b，mqtt3.1.1版本时指向bv5
+            unsigned int blen, bv5len;
+            if (epoll->mqttversion == 5) {
+                btemp = CreatePublishData(topic, topiclen, buff+offset, packagelen-offset, 4, &blen);
+                b = btemp;
+                bv5 = buff;
+                bv5len = packagelen;
+            } else {
+                b = buff;
+                blen = packagelen;
+                btemp = CreatePublishData(topic, topiclen, buff+offset, packagelen-offset, 5, &bv5len);
+                bv5 = btemp;
+            }
+            SendToClient(b, blen, bv5, bv5len, topic, topiclen);
+            sfree(btemp, __FILE__, __LINE__);
         } else if (type == PUBACK) {
             return;
         } else if (type == PUBREC || type == PUBREL || type == PUBCOMP) {
@@ -372,17 +432,17 @@ LOOP:
             unsigned short ackoffset;
             if (epoll->mqttversion == 5) {
                 suback[0] = SUBACK;
-                suback[1] = 0x02;
-                suback[2] = buff[offset];
-                suback[3] = buff[offset+1];
-                ackoffset = 4;
-            } else {
-                suback[0] = SUBACK;
                 suback[1] = 0x03;
                 suback[2] = buff[offset];
                 suback[3] = buff[offset+1];
                 suback[4] = 0x00;
                 ackoffset = 5;
+            } else {
+                suback[0] = SUBACK;
+                suback[1] = 0x02;
+                suback[2] = buff[offset];
+                suback[3] = buff[offset+1];
+                ackoffset = 4;
             }
             offset += 2;
             if (epoll->mqttversion == 5) {
@@ -515,15 +575,15 @@ LOOP:
             unsigned char unsuback[5];
             if (epoll->mqttversion == 5) {
                 unsuback[0] = UNSUBACK;
-                unsuback[1] = 0x02;
-                unsuback[2] = buff[offset];
-                unsuback[3] = buff[offset+1];
-            } else {
-                unsuback[0] = UNSUBACK;
                 unsuback[1] = 0x03;
                 unsuback[2] = buff[offset];
                 unsuback[3] = buff[offset+1];
                 unsuback[4] = 0x00;
+            } else {
+                unsuback[0] = UNSUBACK;
+                unsuback[1] = 0x02;
+                unsuback[2] = buff[offset];
+                unsuback[3] = buff[offset+1];
             }
             offset += 2;
             if (epoll->mqttversion == 5) {
@@ -623,9 +683,9 @@ LOOP:
         if (buff[offset] != 0x03 && buff[offset] != 0x04 && buff[offset] != 0x05) { // 0x03为mqtt3.1, 0x04为mqtt3.1.1, 0x05为mqtt5
             printf("no support mqtt version:%d, in %s, at %d\n", buff[offset], __FILE__, __LINE__);
             if (epoll->mqttversion == 5) {
-                epoll->write(epoll, connvererr, sizeof(connvererr));
-            } else {
                 epoll->write(epoll, connvererrv5, sizeof(connvererrv5));
+            } else {
+                epoll->write(epoll, connvererr, sizeof(connvererr));
             }
             Epoll_Delete(epoll);
             return;
