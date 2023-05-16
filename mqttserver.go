@@ -344,7 +344,6 @@ func HandleMqttClientRequest(ms *MqttServer, mqttclient *MqttClient) {
 						log.Println(err)
 						return
 					}
-					log.Println(subackdata)
 				case 0xa0: // unsubscribe
 					log.Println("unsubscribe")
 					if (data[0] & 0x0f) != 0x02 {
