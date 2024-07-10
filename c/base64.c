@@ -1,7 +1,8 @@
+#include <stdint.h>
 
-const unsigned char* base64table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const uint8_t* base64table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-unsigned char gettableindex (unsigned char param) {
+uint8_t gettableindex (uint8_t param) {
     if ('A' <= param && param <= 'Z') {
         return param - 'A';
     } else if ('a' <= param && param <= 'z') {
@@ -19,9 +20,9 @@ unsigned char gettableindex (unsigned char param) {
     }
 }
 
-int base64_encode (const unsigned char* data, unsigned int size, unsigned char* base64, unsigned int *length) {
-    unsigned int i, j = 0;
-    unsigned int len = size;
+int base64_encode (const uint8_t* data, uint32_t size, uint8_t* base64, uint32_t *length) {
+    uint32_t i, j = 0;
+    uint32_t len = size;
     while (len % 3) {
         ++len;
     }
@@ -60,8 +61,8 @@ int base64_encode (const unsigned char* data, unsigned int size, unsigned char* 
     return 0;
 }
 
-int base64_decode (const unsigned char* base64, unsigned int length, unsigned char *data, unsigned int *size) {
-    unsigned int i, j, len;
+int base64_decode (const uint8_t* base64, uint32_t length, uint8_t *data, uint32_t *size) {
+    uint32_t i, j, len;
     if (base64[length-2] == '=') {
         len = 3 * length / 4 - 2;
     } else if (base64[length-1] == '=') {
@@ -73,10 +74,10 @@ int base64_decode (const unsigned char* base64, unsigned int length, unsigned ch
         return -1;
     }
     for (i = 3, j = 0 ; i < length ; i+=4) {
-        unsigned char tmp1 = gettableindex(base64[i-3]);
-        unsigned char tmp2 = gettableindex(base64[i-2]);
-        unsigned char tmp3 = gettableindex(base64[i-1]);
-        unsigned char tmp4 = gettableindex(base64[i]);
+        uint8_t tmp1 = gettableindex(base64[i-3]);
+        uint8_t tmp2 = gettableindex(base64[i-2]);
+        uint8_t tmp3 = gettableindex(base64[i-1]);
+        uint8_t tmp4 = gettableindex(base64[i]);
         data[j] = ((tmp1 & 0x3f) << 2) | ((tmp2 & 0x30) >> 4);
         ++j;
         if (j == len) {

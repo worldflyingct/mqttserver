@@ -2,8 +2,8 @@
 #define __WS_H__
 
 struct HTTPPARAM {
-    unsigned char *key;
-    unsigned char *value;
+    uint8_t *key;
+    uint8_t *value;
 };
 
 int Ws_Create ();

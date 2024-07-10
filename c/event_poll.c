@@ -11,7 +11,7 @@
 
 #define MAXEVENTS      2048
 
-static unsigned char buffer[512*1024];
+static uint8_t buffer[512*1024];
 
 static int epollfd = 0;
 static int wait_count;
@@ -158,8 +158,8 @@ static void Epoll_Event (int event, EPOLL *epoll) {
                 epoll->writeenable = 1;
                 mod_fd_at_poll(epoll, 0);
             } else if (res > 0) {
-                unsigned int bufflen = epoll->bufflen - res;
-                unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
+                uint32_t bufflen = epoll->bufflen - res;
+                uint8_t *buff = (uint8_t*)smalloc(bufflen, __FILE__, __LINE__);
                 if (buff == NULL) {
                     Epoll_Delete(epoll);
                     return;
@@ -183,7 +183,7 @@ static void Epoll_Event (int event, EPOLL *epoll) {
     }
 }
 
-void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
+void Epoll_Write (EPOLL *epoll, const uint8_t *data, uint64_t len) {
     if (epoll->writeenable) {
         ssize_t res;
         if (epoll->tls) {
@@ -203,8 +203,8 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             }
             res = 0;
         }
-        unsigned int bufflen = len - res;
-        unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
+        uint32_t bufflen = len - res;
+        uint8_t *buff = (uint8_t*)smalloc(bufflen, __FILE__, __LINE__);
         if (buff == NULL) {
             Epoll_Delete(epoll);
             return;
@@ -217,8 +217,8 @@ void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len) {
             mod_fd_at_poll(epoll, 1);
         }
     } else {
-        unsigned int bufflen = epoll->bufflen + len;
-        unsigned char *buff = (unsigned char*)smalloc(bufflen, __FILE__, __LINE__);
+        uint32_t bufflen = epoll->bufflen + len;
+        uint8_t *buff = (uint8_t*)smalloc(bufflen, __FILE__, __LINE__);
         if (buff == NULL) {
             Epoll_Delete(epoll);
             return;

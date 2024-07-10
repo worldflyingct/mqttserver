@@ -6,7 +6,7 @@
 
 static int pipefd[2];
 
-static void Timer_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
+static void Timer_Read_Handler (EPOLL *epoll, uint8_t *buff) { // 作为mqtt处理
     read(epoll->fd, buff, 1024);
     CheckMqttClients();
 }

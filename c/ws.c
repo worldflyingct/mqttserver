@@ -18,25 +18,25 @@
 #define PAGE500         "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nContent-Length: 104\r\nConnection: close\r\n\r\n<html><head><title>500 Internal Server Error</title></head><body>500 Internal Server Error</body></html>"
 #define magic_String    "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-static const unsigned char pong[] = {0x8a, 0x00};
+static const uint8_t pong[] = {0x8a, 0x00};
 
 static int ParseHttpHeader (char* str,
-                                unsigned int str_size,
+                                uint32_t str_size,
                                 char **method,
                                 char **path,
                                 char **version,
                                 struct HTTPPARAM *httpparam,
-                                unsigned int *httpparam_size);
+                                uint32_t *httpparam_size);
 
-static void Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned long len) {
+static void Ws_Write_Connect (EPOLL *epoll, const uint8_t *data, uint64_t len) {
     if (len < 0x7e) {
-        unsigned char package[len+2];
+        uint8_t package[len+2];
         package[0] = 0x82;
         package[1] = len;
         memcpy(package + 2, data, len);
         Epoll_Write(epoll, package, len + 2);
     } else if (len < 0x10000) {
-        unsigned char package[len+4];
+        uint8_t package[len+4];
         package[0] = 0x82;
         package[1] = 0x7e;
         package[2] = len >> 8;
@@ -44,7 +44,7 @@ static void Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned 
         memcpy(package + 4, data, len);
         Epoll_Write(epoll, package, len + 4);
     } else {
-        unsigned char package[len+10];
+        uint8_t package[len+10];
         package[0] = 0x82;
         package[1] = 0x7f;
         package[2] = len >> 56;
@@ -62,8 +62,8 @@ static void Ws_Write_Connect (EPOLL *epoll, const unsigned char *data, unsigned 
 
 #define MINPACKAGESIZE   32
 
-static int CreateWsBuffer (EPOLL *epoll, unsigned char *buff, unsigned int packagelen, unsigned int len) {
-    unsigned char *package = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
+static int CreateWsBuffer (EPOLL *epoll, uint8_t *buff, uint32_t packagelen, uint32_t len) {
+    uint8_t *package = (uint8_t*)smalloc(packagelen, __FILE__, __LINE__);
     if (package == NULL) {
         return -1;
     }
@@ -75,7 +75,7 @@ static int CreateWsBuffer (EPOLL *epoll, unsigned char *buff, unsigned int packa
     return 0;
 }
 
-static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
+static void Ws_Read_Handler (EPOLL *epoll, uint8_t *buff) {
     ssize_t len;
     if (epoll->tls) {
         len = SSL_read(epoll->tls, buff, 512*1024);
@@ -96,8 +96,8 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         if (epoll->wspackagelen) {
             if (epoll->wsuselen + len > epoll->wspackagecap) {
-                unsigned int packagecap = epoll->wsuselen + len;
-                unsigned char *package = (unsigned char*)smalloc(packagecap, __FILE__, __LINE__);
+                uint32_t packagecap = epoll->wsuselen + len;
+                uint8_t *package = (uint8_t*)smalloc(packagecap, __FILE__, __LINE__);
                 if (package == NULL) {
                     Epoll_Delete(epoll);
                     return;
@@ -119,9 +119,9 @@ static void Ws_Read_Handler (EPOLL *epoll, unsigned char *buff) {
             epoll->wspackagelen = 0;
             epoll->wsuselen = 0;
         }
-        unsigned char *mask;
-        unsigned char *data;
-        unsigned int packagelen;
+        uint8_t *mask;
+        uint8_t *data;
+        uint32_t packagelen;
 LOOP:
         // printf("in %s, at %d\n", __FILE__, __LINE__);
         if (len < 2) {
@@ -130,7 +130,7 @@ LOOP:
             }
             return;
         }
-        unsigned int datalen = buff[1] & 0x7f;
+        uint32_t datalen = buff[1] & 0x7f;
         if (buff[1] & 0x80) {
             if (datalen < 0x7e) {
                 mask = buff + 2;
@@ -145,7 +145,7 @@ LOOP:
                 }
                 mask = buff + 4;
                 data = mask + 4;
-                datalen = ((unsigned short)buff[2] << 8) | (unsigned short)buff[3];
+                datalen = ((uint16_t)buff[2] << 8) | (uint16_t)buff[3];
                 packagelen = datalen + 8;
             } else {
                 if (len < 10) {
@@ -156,7 +156,7 @@ LOOP:
                 }
                 mask = buff + 6;
                 data = mask + 4;
-                datalen = ((unsigned long)buff[2] << 56) | ((unsigned long)buff[3] << 48) | ((unsigned long)buff[4] << 40) | ((unsigned long)buff[5] << 32) | ((unsigned long)buff[6] << 24) | ((unsigned long)buff[7] << 16) | ((unsigned long)buff[8] << 8) | (unsigned long)buff[9];
+                datalen = ((uint64_t)buff[2] << 56) | ((uint64_t)buff[3] << 48) | ((uint64_t)buff[4] << 40) | ((uint64_t)buff[5] << 32) | ((uint64_t)buff[6] << 24) | ((uint64_t)buff[7] << 16) | ((uint64_t)buff[8] << 8) | (uint64_t)buff[9];
                 packagelen = datalen + 10;
             }
         } else {
@@ -172,7 +172,7 @@ LOOP:
                     return;
                 }
                 data = buff + 4;
-                datalen = ((unsigned short)buff[2] << 8) | (unsigned short)buff[3];
+                datalen = ((uint16_t)buff[2] << 8) | (uint16_t)buff[3];
                 packagelen = datalen + 4;
             } else {
                 if (len < 10) {
@@ -182,7 +182,7 @@ LOOP:
                     return;
                 }
                 data = buff + 6;
-                datalen = ((unsigned long)buff[2] << 56) | ((unsigned long)buff[3] << 48) | ((unsigned long)buff[4] << 40) | ((unsigned long)buff[5] << 32) | ((unsigned long)buff[6] << 24) | ((unsigned long)buff[7] << 16) | ((unsigned long)buff[8] << 8) | (unsigned long)buff[9];
+                datalen = ((uint64_t)buff[2] << 56) | ((uint64_t)buff[3] << 48) | ((uint64_t)buff[4] << 40) | ((uint64_t)buff[5] << 32) | ((uint64_t)buff[6] << 24) | ((uint64_t)buff[7] << 16) | ((uint64_t)buff[8] << 8) | (uint64_t)buff[9];
                 packagelen = datalen + 6;
             }
         }
@@ -193,7 +193,7 @@ LOOP:
             return;
         }
         if (mask) {
-            for (unsigned int i = 0 ; i < datalen ; ++i) {
+            for (uint32_t i = 0 ; i < datalen ; ++i) {
                 data[i] ^= mask[i & 0x03];
             }
         }
@@ -228,13 +228,13 @@ LOOP:
     } else {
         char *method, *path, *version;
         struct HTTPPARAM httpparam[30];
-        unsigned int size;
+        uint32_t size;
         int k, p, headlen;
-        unsigned long packagelen;
+        uint64_t packagelen;
         if (epoll->httphead != NULL) {
             if (epoll->wsuselen + len > epoll->wspackagecap) {
-                unsigned int packagecap = epoll->wsuselen + len;
-                unsigned char *package = (unsigned char*)smalloc(packagecap, __FILE__, __LINE__);
+                uint32_t packagecap = epoll->wsuselen + len;
+                uint8_t *package = (uint8_t*)smalloc(packagecap, __FILE__, __LINE__);
                 if (package == NULL) {
                     Epoll_Delete(epoll);
                     return;
@@ -295,7 +295,7 @@ LOOP:
                 }
             }
             if (packagelen > len) {
-                unsigned char *wspackage = (unsigned char*)smalloc(packagelen, __FILE__, __LINE__);
+                uint8_t *wspackage = (uint8_t*)smalloc(packagelen, __FILE__, __LINE__);
                 if (wspackage == NULL) {
                     Epoll_Write(epoll, PAGE500, sizeof(PAGE500));
                     Epoll_Delete(epoll);
@@ -359,20 +359,20 @@ LOOP:
                 epoll->wsstate = 1;
             } else if (!strcmp(path, "/getclientsnum")) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
-                unsigned int num = GetClientsNum();
+                uint32_t num = GetClientsNum();
                 char body[16];
-                unsigned char bodylen = sprintf(body, "%u", num);
+                uint8_t bodylen = sprintf(body, "%u", num);
                 char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                uint8_t httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
                 Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
             } else if (!memcmp(path, "/checkclientstatus/", 19)) {
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
-                unsigned char res = CheckClientStatus(path+19, strlen(path+19));
+                uint8_t res = CheckClientStatus(path+19, strlen(path+19));
                 char body[16];
-                unsigned char bodylen = sprintf(body, "%u", res);
+                uint8_t bodylen = sprintf(body, "%u", res);
                 char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                uint8_t httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
                 Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
             } else if (!strcmp(path, "/showclients")) {
@@ -390,9 +390,9 @@ LOOP:
                 // printf("in %s, at %d\n", __FILE__, __LINE__);
                 int malloc_num = GetMallocNum();
                 char body[16];
-                unsigned char bodylen = sprintf(body, "%d", malloc_num);
+                uint8_t bodylen = sprintf(body, "%d", malloc_num);
                 char http[128];
-                unsigned char httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
+                uint8_t httplen = sprintf(http, HTTPOKHEAD, bodylen, body);
                 Epoll_Write(epoll, http, httplen);
                 Epoll_Delete(epoll);
 #endif
@@ -410,7 +410,7 @@ LOOP:
     }
 }
 
-static void Ws_New_Connect (EPOLL *e, unsigned char *buff) {
+static void Ws_New_Connect (EPOLL *e, uint8_t *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);
@@ -504,15 +504,15 @@ int Ws_Create () {
 }
 
 static int ParseHttpHeader (char* str,
-                                unsigned int str_size,
+                                uint32_t str_size,
                                 char **method,
                                 char **path,
                                 char **version,
                                 struct HTTPPARAM *httpparam,
-                                unsigned int *httpparam_size) {
-    unsigned int maxHttpParamNum = *httpparam_size;
-    unsigned int httpParamNum = 0;
-    unsigned char step = 0;
+                                uint32_t *httpparam_size) {
+    uint32_t maxHttpParamNum = *httpparam_size;
+    uint32_t httpParamNum = 0;
+    uint8_t step = 0;
     for (int i = 0 ; i < str_size ; ++i) {
         switch (step) {
             case 0: // 寻找mothod开始

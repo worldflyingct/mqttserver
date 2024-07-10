@@ -6,7 +6,7 @@
 
 static int malloc_num = 0;
 
-void* smalloc (unsigned int size, char *filename, unsigned int line) {
+void* smalloc (uint32_t size, char *filename, uint32_t line) {
     printf("malloc, size: %u, in %s, at %d\n", size, filename, line);
     if (size == 0) {
         printf("malloc fail, size: %u, in %s, at %d\n", size, filename, line);
@@ -21,7 +21,7 @@ void* smalloc (unsigned int size, char *filename, unsigned int line) {
     return ptr;
 }
 
-void sfree (void *ptr, char *filename, unsigned int line) {
+void sfree (void *ptr, char *filename, uint32_t line) {
     printf("free, in %s, at %d\n", filename, line);
     if (ptr == NULL) {
         printf("ptr is NULL, in %s, at %d\n", filename, line);

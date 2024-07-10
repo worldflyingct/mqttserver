@@ -7,7 +7,7 @@
 #include "config.h"
 #include "mqtt.h"
 
-static void Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt处理
+static void Tcp_Read_Handler (EPOLL *epoll, uint8_t *buff) { // 作为mqtt处理
     ssize_t len;
     if (epoll->tls) {
         len = SSL_read(epoll->tls, buff, 512*1024);
@@ -28,7 +28,7 @@ static void Tcp_Read_Handler (EPOLL *epoll, unsigned char *buff) { // 作为mqtt
     HandleMqttClientRequest(epoll, buff, len);
 }
 
-static void Tcp_New_Connect (EPOLL *e, unsigned char *buff) {
+static void Tcp_New_Connect (EPOLL *e, uint8_t *buff) {
     struct sockaddr_in sin;
     socklen_t in_addr_len = sizeof(struct sockaddr_in);
     int fd = accept(e->fd, (struct sockaddr*)&sin, &in_addr_len);

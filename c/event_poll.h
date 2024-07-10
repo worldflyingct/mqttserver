@@ -6,8 +6,8 @@
 #include "ws.h"
 
 typedef struct EPOLL EPOLL;
-typedef void READ_FUNCTION (EPOLL *epoll, unsigned char *buff);
-typedef void WRITE_FUNCTION (EPOLL *epoll, const unsigned char *data, unsigned long len);
+typedef void READ_FUNCTION (EPOLL *epoll, uint8_t *buff);
+typedef void WRITE_FUNCTION (EPOLL *epoll, const uint8_t *data, uint64_t len);
 typedef void DELETE_FUNCTION (EPOLL *epoll);
 
 struct HTTPHEAD {
@@ -15,7 +15,7 @@ struct HTTPHEAD {
     char *httppath;
     char *httpversion;
     struct HTTPPARAM httpparam[30];
-    unsigned short httpparam_size;
+    uint16_t httpparam_size;
     int k;
     int p;
     int headlen;
@@ -26,42 +26,42 @@ struct EPOLL {
     READ_FUNCTION *read;
     WRITE_FUNCTION *write;
     DELETE_FUNCTION *delete;
-    unsigned char *buff;
-    unsigned int bufflen;
-    unsigned char writeenable;
+    uint8_t *buff;
+    uint32_t bufflen;
+    uint8_t writeenable;
     EPOLL *head;
     EPOLL *tail;
     SSL *tls;
-    unsigned char listenwrite;
-    unsigned char tlsok; // 0为尚未握手成功，1为握手成功
-    unsigned char mqttstate; // 0为未注，1为注册
-    unsigned char *mqttpackage;
-    unsigned int mqttpackagecap; // 当前包缓存的实际容量
-    unsigned int mqttpackagelen; // 当前包的理论大小
-    unsigned int mqttuselen; // 已经消耗的缓存
-    unsigned char *clientid;
-    unsigned short clientidlen;
-    unsigned char *mqttwilltopic;
-    unsigned short mqttwilltopiclen;
-    unsigned char *mqttwillmsg;
-    unsigned short mqttwillmsglen;
+    uint8_t listenwrite;
+    uint8_t tlsok; // 0为尚未握手成功，1为握手成功
+    uint8_t mqttstate; // 0为未注，1为注册
+    uint8_t *mqttpackage;
+    uint32_t mqttpackagecap; // 当前包缓存的实际容量
+    uint32_t mqttpackagelen; // 当前包的理论大小
+    uint32_t mqttuselen; // 已经消耗的缓存
+    uint8_t *clientid;
+    uint16_t clientidlen;
+    uint8_t *mqttwilltopic;
+    uint16_t mqttwilltopiclen;
+    uint8_t *mqttwillmsg;
+    uint16_t mqttwillmsglen;
     struct SubScribeList *sbbl;
-    unsigned short defaultkeepalive;
-    unsigned short keepalive;
+    uint16_t defaultkeepalive;
+    uint16_t keepalive;
     struct HTTPHEAD *httphead;
-    unsigned char wsstate; // 0为未注，1为注册
-    unsigned char *wspackage;
-    unsigned long wspackagecap; // 当前包缓存的实际容量
-    unsigned long wspackagelen; // 当前包的理论大小
-    unsigned long wsuselen; // 已经消耗的缓存
-    unsigned char mqttversion;
+    uint8_t wsstate; // 0为未注，1为注册
+    uint8_t *wspackage;
+    uint64_t wspackagecap; // 当前包缓存的实际容量
+    uint64_t wspackagelen; // 当前包的理论大小
+    uint64_t wsuselen; // 已经消耗的缓存
+    uint8_t mqttversion;
 };
 
 int event_poll_create ();
 void event_poll_loop ();
 EPOLL *add_fd_to_poll (int fd, int out);
 int mod_fd_at_poll (EPOLL *epoll, int eout);
-void Epoll_Write (EPOLL *epoll, const unsigned char *data, unsigned long len);
+void Epoll_Write (EPOLL *epoll, const uint8_t *data, uint64_t len);
 void Epoll_Delete (EPOLL *epoll);
 
 #endif

@@ -4,21 +4,21 @@
 #include <openssl/ssl.h>
 
 struct ConfigData {
-    unsigned short tcpport;
-    unsigned short tlsport;
-    unsigned short wsport;
-    unsigned short wssport;
-    unsigned char crtpath[129];
-    unsigned char keypath[129];
-    unsigned char mqttuser[33];
-    unsigned char mqttuserlen;
-    unsigned char mqttkey[33];
-    unsigned char mqttkeylen;
-    unsigned char mqttkeymode; // 0为一般模式，1为根据当前时间戳与sha256计算模式
+    uint16_t tcpport;
+    uint16_t tlsport;
+    uint16_t wsport;
+    uint16_t wssport;
+    uint8_t crtpath[129];
+    uint8_t keypath[129];
+    uint8_t mqttuser[33];
+    uint8_t mqttuserlen;
+    uint8_t mqttkey[33];
+    uint8_t mqttkeylen;
+    uint8_t mqttkeymode; // 0为一般模式，1为根据当前时间戳与sha256计算模式
     SSL_CTX *ctx;
-    unsigned char tcpkeepidle;
-    unsigned char tcpkeepinterval;
-    unsigned char tcpkeepcount;
+    uint8_t tcpkeepidle;
+    uint8_t tcpkeepinterval;
+    uint8_t tcpkeepcount;
 };
 
 struct ConfigData* InitConfig ();

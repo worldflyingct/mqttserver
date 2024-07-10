@@ -2,8 +2,8 @@
 #define __SMALLOC_H__
 
 #ifdef DEBUG
-void* smalloc(unsigned int size, char *filename, unsigned int line);
-void sfree (void *ptr, char *filename, unsigned int line);
+void* smalloc(uint32_t size, char *filename, uint32_t line);
+void sfree (void *ptr, char *filename, uint32_t line);
 int GetMallocNum ();
 int setmemcheck ();
 #else
