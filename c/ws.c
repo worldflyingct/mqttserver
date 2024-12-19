@@ -332,12 +332,14 @@ LOOP:
                     Epoll_Delete(epoll);
                     return;
                 }
+/*
                 if (p == -1) {
                     printf("not found Sec-WebSocket-Protocol, in %s, at %d\n", __FILE__, __LINE__);
                     Epoll_Write(epoll, ERRORPAGE, sizeof(ERRORPAGE));
                     Epoll_Delete(epoll);
                     return;
                 }
+*/
                 char input[64];
                 int keylen = strlen(httpparam[k].value);
                 memcpy(input, httpparam[k].value, keylen);
